@@ -1,58 +1,19 @@
-/*                                produce
- *
- *  This Is a C Program For Converting binary data from the BSR AltAcc
- *  to ASCII Data with nice little Headers.
- *
- *   Rev  Who  Date        Description
- * =====  ===  ==========  ========================================
- * 1.25c  kjh  09-28-1998  Eliminated stderr output for DOS version
- *
- */
+"""                                produce
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <string.h>
-#include <signal.h>
-#include <malloc.h>
-#include <time.h>
-#include <errno.h>
-#include <math.h>
+This Is a Python Program For Converting binary data from the BSR AltAcc
+to ASCII Data with nice little Headers.
 
-#define VERSION                  "1.25c"
+  Rev  Who  Date        Description
+=====  ===  ==========  ========================================
+1.25c  kjh  09-28-1998  Eliminated stderr output for DOS version
+"""
 
-#undef DOS                       /* gcc compiler */
-// #define DOS                      /* DOS compiler */
+VERSION = "1.25c"
 
-#ifdef DOS
-   #include <conio.h>
-   #include <process.h>
-   #include <dos.h>
-   #include <bios.h>
+altacc_format = struct.Struct("<B3x4B4BBBBB4sB4sH5x8160sHBB")
+ALTACC_FILE_SIZE = altacc_format.size
 
-   #define R_OK   04
-   #define access _access
-
-#else
-   #include <unistd.h>
-#endif
-
-#define     TRUE           1
-#define     FALSE          0
-
-   typedef  unsigned char        byte ;
-   typedef  unsigned short       u16 ;
-   typedef  unsigned long        u32 ;
-
-   typedef  struct   AP
-   {
-      byte  A ;
-      byte  P ;
-   }  AP ;
-
-#define NUM_PAIRS 4080
-
-/* this is the structure of the AltAcc Header ( 32 bytes ) */
+""" this is the structure of the AltAcc Header ( 32 bytes )
 
    typedef  struct   AltAccDump
    {
@@ -84,122 +45,86 @@
 
    } AltAccDump ;
 
-#define ALTACC_FILE_SIZE  sizeof ( AltAccDump )
-
    union DataBuf
    {
       struct   AltAccDump  Name ;
       byte                 Byte [ ALTACC_FILE_SIZE ] ;
    }  AltAccFile ;
+"""
 
-   const char* Header [] =
-   {
-      "      Time  Accel  Press    Sum  Accelerat   Velocity   Altitude  PressAlt",
-      "       sec  units  units  units   ft/sec^2     ft/sec       feet      feet",
-      " =========  =====  =====  =====  =========  =========  =========  ========",
-   } ;
+Header = (
+    "      Time  Accel  Press    Sum  Accelerat   Velocity   Altitude  PressAlt\n"
+    "       sec  units  units  units   ft/sec^2     ft/sec       feet      feet\n"
+    " =========  =====  =====  =====  =========  =========  =========  ========\n"
+)
 
-   const char* ExHead [] =
-   {
-      "\"Time\",\"Accel\",\"Press\",\"Vel\",\"Accel\",\"Velocity\",\"IAlt\",\"PAlt\"",
-      "\"sec\",\"GHarrys\",\"Orvilles\",\"Verns\",\"ft/sec^2\",\"ft/sec\",\"feet\",\"feet\"",
-   } ;
+ExHead = (
+    '''"Time","Accel","Press","Vel","Accel","Velocity","IAlt","PAlt",'''
+    '''"sec","GHarrys","Orvilles","Verns","ft/sec^2","ft/sec","feet","feet"'''
+)
+
+UNITS = [
+    "sec"
+    "in",
+    "ft",
+    "cm",
+    "m",
+    "km",
+    "oz",
+    "lb",
+    "gm",
+    "kg",
+    "inhg",
+    "mmhg",
+    "torr",
+    "kpa",
+]
+
+# default units
+U = [
+    2,  # ft
+    7,  # lb
+    0,  # sec
+    10,  # inhg
+]
 
 
-#define NUM_HEADER  ( sizeof ( Header ) / sizeof ( const char* ))
-#define NUM_EXHEAD  ( sizeof ( ExHead ) / sizeof ( const char* ))
+progname = None            # who am i, anyway ?
+proghome = None            # and where am i ?
 
-   const char* Units [] =
-   {
-      "sec",      /*  0 */
-      "in",       /*  1 */
-      "ft" ,      /*  2 */
-      "cm",       /*  3 */
-      "m",        /*  4 */
-      "km",       /*  5 */
-      "oz",       /*  6 */
-      "lb",       /*  7 */
-      "gm",       /*  8 */
-      "kg",       /*  9 */
-      "inhg",     /* 10 */
-      "mmhg",     /* 11 */
-      "torr",     /* 12 */
-      "kpa",      /* 13 */
-   };
+Verbose = True
 
-   /* default units */
+OutFileName = None
+InpFileName = None
+CalFileName = None
+NitFileName = None
+ComFileName = None
 
-   u16 U [ ] =
-   {
-      2,          /* ft   */
-      7,          /* lb   */
-      0,          /* sec  */
-     10,          /* inhg */
-   } ;
+ComOride = False
 
-   extern   char   * optarg ;             /* required for lib fun getarg */
-   extern   int      optind ;             /* ditto                       */
+NIT_NAME    "prodata.nit"
+CAL_NAME    "prodata.cal"
+OUT_NAME    "prodata.dat"
 
-   char   * progname       ;              /* who am i, anyway ?          */
-   char   * proghome       ;              /* and where am i ?            */
+CalOride = False  # When the -c is invoked (v2)
 
-   int      Verbose = TRUE ;
+PALT_IDEAL_5100 =      210            # what _my_ test unit sez
 
-#define     NAME_LEN_MAX       256
+XDucerType = "MPX4100"                # MPX Type (v1.25)
 
-   FILE   * OutFileAddr ;
-   char     OutFileName [ NAME_LEN_MAX+1 ] ;
+XDucerTypeStr = { "MPX4100": "Motorola MPX5100", "MPX5100": "Motorola MPX4100" }
 
-   char     InpFileName [ NAME_LEN_MAX+1 ] ;
+PALT_GAIN_4100 =       0.1113501786   # this is the 4100 xducer
+PALT_OFFSET_4100 =     3.418657       # these are average lines
+PALT_GAIN_5100 =       0.1354567027   # this is the 5100 xducer
+PALT_OFFSET_5100 =     1.475092       # this is 40 mV / KPa
 
-   char     CalFileName [ NAME_LEN_MAX+1 ] ;
+# PALT_GAIN_4100         0.1760937134   /* this is the 4100 xducer */
+# PALT_OFFSET_4100     -12.341491       /* this is 52 mV / KPA !!! */
+# PALT_GAIN_5100         0.1447552322   /* this is the 5100 xducer */
+# PALT_OFFSET_5100      -0.478599       /* this is from test1      */
 
-   char     NitFileName [ NAME_LEN_MAX+1 ] ;
-
-   char     ComFileName [ NAME_LEN_MAX+1 ] ;
-
-   int      ComOride = FALSE ;
-
-#define  NIT_NAME    "prodata.nit"
-#define  CAL_NAME    "prodata.cal"
-#define  OUT_NAME    "prodata.dat"
-
-   int      CalOride   = FALSE;              /* When the -c is invoked (v2) */
-
-#define   PALT_IDEAL_5100        210            /* what _my_ test unit sez  */
-
-#define   MPX5100                0
-#define   MPX4100                1
-
-   int   XDucerType = MPX4100    ;              /* MPX Type (v1.25)         */
-
-   const char* XDucerTypeStr [] =                     /* v125b */
-          {
-            "Motorola MPX5100",
-            "Motorola MPX4100",
-          } ;
-
-#define   PALT_GAIN_4100         0.1113501786   /* this is the 4100 xducer */
-#define   PALT_OFFSET_4100       3.418657       /* these are average lines */
-
-#define   PALT_GAIN_5100         0.1354567027   /* this is the 5100 xducer */
-#define   PALT_OFFSET_5100       1.475092       /* this is 40 mV / KPa     */
-
-// fine   PALT_GAIN_4100         0.1760937134   /* this is the 4100 xducer */
-// fine   PALT_OFFSET_4100     -12.341491       /* this is 52 mV / KPA !!! */
-
-// fine   PALT_GAIN_5100         0.1447552322   /* this is the 5100 xducer */
-// fine   PALT_OFFSET_5100      -0.478599       /* this is from test1      */
-
-   typedef  struct   CalData
-   {
-      char * Tag ;
-      char * Nam ;
-      double Val ;
-   }  CalData ;
-
-   CalData CaliData [ ] =
-   {
+cal_info = [
       { "actalt", "Actual Altitude",                0.0 },
       { "actbp",  "Actual Barometric Pressure",     0.0 },
       { "avgbp",  "AltAcc Pressure Avg",            0.0 },
@@ -218,28 +143,26 @@
       { "y[0]",   "Y-Intercept of AltAcc Output",   0.0 },
       { "ccoff",  "Correlation Coefficient",        0.0 },
       { "xducer", "Motorola Pressure XDucer Type",  0.0 },
-   } ;
+]
 
-#define NUM_CAL_ROWS ( sizeof ( CaliData ) /  ( sizeof ( CalData )))
-
-#define      ActAlt     0
-#define      ActBP      1
-#define      AvgBP      2
-#define      StDBP      3
-#define      OffBP      4
-#define      GainBP     5
-#define      AvgNegG    6
-#define      StDNegG    7
-#define      FiDNegG    8
-#define      AvgZeroG   9
-#define      StDZeroG  10
-#define      FiDZeroG  11
-#define      AvgOneG   12
-#define      StDOneG   13
-#define      Slope     14
-#define      YZero     15
-#define      CCoff     16
-#define      XDucer    17
+ActAlt     0
+ActBP      1
+AvgBP      2
+StDBP      3
+OffBP      4
+GainBP     5
+AvgNegG    6
+StDNegG    7
+FiDNegG    8
+AvgZeroG   9
+StDZeroG  10
+FiDZeroG  11
+AvgOneG   12
+StDOneG   13
+Slope     14
+YZero     15
+CCoff     16
+XDucer    17
 
    typedef  struct   NitData
    {
@@ -260,37 +183,31 @@
       { "xducer", 8 },
    } ;
 
-#define  NUM_NIT_TAGS   ( sizeof ( NitTags ) / sizeof ( NitData ))
+NUM_NIT_TAGS   ( sizeof ( NitTags ) / sizeof ( NitData ))
 
-#define  NT_PORT     1
-#define  NT_TIME     2
-#define  NT_ALT      3
-#define  NT_VEL      4
-#define  NT_ACC      5
-#define  NT_PRESS    6
-#define  NT_CAL      7
-#define  NT_XDUCER   8
+NT_PORT     1
+NT_TIME     2
+NT_ALT      3
+NT_VEL      4
+NT_ACC      5
+NT_PRESS    6
+NT_CAL      7
+NT_XDUCER   8
 
-#ifdef DOS
-   #define   DIR_SEP                '\\'     /* change for unix / mac / dos */
-#else
-   #define   DIR_SEP                '/'      /* change for unix / mac / dos */
-#endif
+INP_SIZE                 256
+MAXARG                   3
 
-#define INP_SIZE                 256
-#define MAXARG                   3
+TICK_CHAR              0xFE
+COMMENT_CHAR           '#'
+ALTACC_DUMP_LEN        8196
+KEY_INP_MAX            256
 
-#define   TICK_CHAR              0xFE
-#define   COMMENT_CHAR           '#'
-#define   ALTACC_DUMP_LEN        8196
-#define   KEY_INP_MAX            256
-
-#define   DEFAULT_GAIN            2.5500        /* +/- 50 G over 255 units  */
-#define   GEE                    32.17          /* you know, Newton and all */
-#define   dT                      0.0625        /* AltAcc dt                */
-#define   TWO_dT                  0.1250        /* 2 * dT for 2-step derivs */
-#define   TWELVE_dT               0.7500        /* 12 * dT for Taylors 2step*/
-#define   dT_3                    0.02083333333333 /* dT / 3 for Simpson    */
+DEFAULT_GAIN            2.5500        /* +/- 50 G over 255 units  */
+GEE                    32.17          /* you know, Newton and all */
+dT                      0.0625        /* AltAcc dt                */
+TWO_dT                  0.1250        /* 2 * dT for 2-step derivs */
+TWELVE_dT               0.7500        /* 12 * dT for Taylors 2step*/
+dT_3                    0.02083333333333 /* dT / 3 for Simpson    */
 
 #define  TIME_END                5.000          /* end report @ down+5 (v2) */
 #define  TIME_MAX              255.125          /* end report @ down+5 (v2) */
@@ -298,7 +215,8 @@
 #define  PRT_REG                 0
 #define  PRT_CSV                 1
 
-#define  LAUNCH_THOLD            16.0           /* about 1/4 sec of 1.33 G  */
+#define  LAUNCH_THOLD            16.0           # about 1/4 sec of 1.33 G
+"""
    void           Breaker ( int );              /* Fun () Prototypes        */
    void           SafeOut ( char * );
    int            SafeIn ( void );
@@ -323,7 +241,7 @@
    char         * FMode ( byte ) ;
    void           Initialize ( char * ) ;
    int            FindFile ( char *, char *, char *, int ) ;
-
+"""
    /* small model MSC compiler won't handle this in the main */
 
    double         vee [ NUM_PAIRS + 12 ] ;
@@ -436,14 +354,6 @@ int main ( argc, argv )
       fprintf ( kjherr, "\nprogram %s could not set Break Handler\n", progname );
       abort () ;
    }
-
-#ifdef DOS
-
-   /* if we own an IRQ, we own responsibility for releasing it too */
-
-   atexit ( CleanUp ) ;
-
-#endif
 
    /* go read the .nit file -- (v2) -- Moved here so CalFile, et al are set */
 
