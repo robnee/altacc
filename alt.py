@@ -1,9 +1,10 @@
-from math import log, exp, pow
+from math import log, exp
 
 
-cali_data = {}
-cali_data['OffBP'] = 23.3
-cali_data['GainBP'] = 1.0
+cali_data = {
+   'OffBP': 23.3,
+   'GainBP': 1.0
+}
 
 
 def palt(press, press_0):
@@ -42,8 +43,8 @@ def palt2(press, press_0):
     if press <= 0:
         return None
 
-    p0 = press_0 * cali_data['GainBP'] + cali_data ['OffBP']
-    p1 = press   * cali_data['GainBP'] + cali_data ['OffBP']
+    p0 = press_0 * cali_data['GainBP'] + cali_data['OffBP']
+    p1 = press   * cali_data['GainBP'] + cali_data['OffBP']
 
     alt = (1 - (p1 / p0) ** (1 / 5.256)) / 0.00000688
 

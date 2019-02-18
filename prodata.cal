@@ -1,0 +1,20 @@
+#
+# AltAcc Calibration Data Compiled by Flight Analyzer
+#
+actalt      0.0000  # Actual Altitude
+actbp       0.0000  # Actual Barometric Pressure
+avgbp     237.0195  # AltAcc Pressure Avg
+stdbp       0.1387  # AltAcc Pressure Std Dev
+offbp      23.3000  # Barometric Pressure Offset
+gainbp      1.0000  # Barometric Pressure Gain Factor
+avg-1g    107.9961  # Minus One Gee Avg
+std-1g      0.0625  # Minus One Gee Std Dev
+fid(0)      4.0000  # Finite Difference on [ -1, 0 ]
+avg0g     111.9961  # Zero Gee Avg
+std0g       0.0625  # Zero Gee Std Dev
+fid(1)      3.8672  # Finite Difference on [ 0, 1 ]
+avg+1g    115.8633  # Plus One Gee Avg
+std+1g      0.3442  # Plus One Gee Std Dev
+do/dg       3.9336  # Slope of AltAcc Output per G
+y[0]      111.9518  # Y-Intercept of AltAcc Output
+ccoff       0.9757  # Correlation Coefficient

@@ -8,49 +8,11 @@ to ASCII Data with nice little Headers.
 1.25c  kjh  09-28-1998  Eliminated stderr output for DOS version
 """
 
+import struct
+import argparse
+from collections import namedtuple
+
 VERSION = "1.25c"
-
-altacc_format = struct.Struct("<B3x4B4BBBBB4sB4sH5x8160sHBB")
-ALTACC_FILE_SIZE = altacc_format.size
-
-""" this is the structure of the AltAcc Header ( 32 bytes )
-
-   typedef  struct   AltAccDump
-   {
-      byte  Version   ;                /* Starting at v2-125, we have V! */
-      byte  kjh_toy [3] ;              /* play data for 'special models' */
-      byte  DrogueSec ;                /* Time of Drogue Deploy, Seconds */
-      byte  Drogue16s ;                /* Time of Drogue Deploy, 1/16sec */
-      byte  DrogueAcc ;                /* Accel at Drogue Deploy         */
-      byte  DroguePre ;                /* Pressure at Drogue Deploy      */
-      byte  MainSec ;                  /* Time of Main Deploy, Seconds   */
-      byte  Main16s ;                  /* Time of Main Deploy, 1/16sec   */
-      byte  MainAcc ;                  /* Accel at Main Deploy           */
-      byte  MainPre ;                  /* Pressure at Main Deploy        */
-      byte  BSFlags ;                  /* AltAcc Launch Status Flags     */
-      byte  BasePre ;                  /* Pressure Reading, Win [Ptr]    */
-      byte  LastPre ;                  /* Pressure Reading, Win [Ptr+3]  */
-      byte  WinPtr  ;                  /* Pointer to Beginning of Win [] */
-      byte  Window [4] ;               /* 4-byte circular buffer, Accel  */
-      byte  AvgAcc ;                   /* Average of Window [] Data      */
-      byte  NitAcc [4];                /* T={1,2,3,4} / 16 (Liftoff Acc) */
-      byte  SumLob ;                   /* Lo Byte of Sum of NitAcc []    */
-      byte  SumHib ;                   /* Hi Byte of Sum of NitAcc []    */
-      byte  foo2 [5] ;                 /* Reserved                       */
-      AP    Data [ NUM_PAIRS ] ;       /* This is the 8160 Byte Flight   */
-      byte  CkSumLob ;                 /* AltAcc's Version of check sum  */
-      byte  CkSumHib ;                 /* Hi Byte of same                */
-      byte  O ;                        /* AltAcc sez 'O'                 */
-      byte  K ;                        /* AltAcc sez 'K'                 */
-
-   } AltAccDump ;
-
-   union DataBuf
-   {
-      struct   AltAccDump  Name ;
-      byte                 Byte [ ALTACC_FILE_SIZE ] ;
-   }  AltAccFile ;
-"""
 
 Header = (
     "      Time  Accel  Press    Sum  Accelerat   Velocity   Altitude  PressAlt\n"
@@ -102,145 +64,177 @@ ComFileName = None
 
 ComOride = False
 
-NIT_NAME    "prodata.nit"
-CAL_NAME    "prodata.cal"
-OUT_NAME    "prodata.dat"
+NIT_NAME = "prodata.nit"
+CAL_NAME = "prodata.cal"
+OUT_NAME = "prodata.dat"
 
 CalOride = False  # When the -c is invoked (v2)
 
-PALT_IDEAL_5100 =      210            # what _my_ test unit sez
+PALT_IDEAL_5100 = 210            # what _my_ test unit sez
 
 XDucerType = "MPX4100"                # MPX Type (v1.25)
 
-XDucerTypeStr = { "MPX4100": "Motorola MPX5100", "MPX5100": "Motorola MPX4100" }
+XDucerTypeStr = {"MPX4100": "Motorola MPX5100", "MPX5100": "Motorola MPX4100"}
 
-PALT_GAIN_4100 =       0.1113501786   # this is the 4100 xducer
-PALT_OFFSET_4100 =     3.418657       # these are average lines
-PALT_GAIN_5100 =       0.1354567027   # this is the 5100 xducer
-PALT_OFFSET_5100 =     1.475092       # this is 40 mV / KPa
+PALT_GAIN_4100 = 0.1113501786   # this is the 4100 xducer
+PALT_OFFSET_4100 = 3.418657     # these are average lines
+PALT_GAIN_5100 = 0.1354567027   # this is the 5100 xducer
+PALT_OFFSET_5100 = 1.475092     # this is 40 mV / KPa
 
-# PALT_GAIN_4100         0.1760937134   /* this is the 4100 xducer */
-# PALT_OFFSET_4100     -12.341491       /* this is 52 mV / KPA !!! */
-# PALT_GAIN_5100         0.1447552322   /* this is the 5100 xducer */
-# PALT_OFFSET_5100      -0.478599       /* this is from test1      */
+# PALT_GAIN_4100   0.1760937134  /* this is the 4100 xducer */
+# PALT_OFFSET_4100 -12.341491    /* this is 52 mV / KPA !!! */
+# PALT_GAIN_5100   0.1447552322  /* this is the 5100 xducer */
+# PALT_OFFSET_5100 -0.478599     /* this is from test1      */
 
-cal_info = [
-      { "actalt", "Actual Altitude",                0.0 },
-      { "actbp",  "Actual Barometric Pressure",     0.0 },
-      { "avgbp",  "AltAcc Pressure Avg",            0.0 },
-      { "stdbp",  "AltAcc Pressure Std Dev",        0.0 },
-      { "offbp",  "Barometric Pressure Offset",     0.0 },
-      { "gainbp", "Barometric Pressure Gain Factor",1.0 },
-      { "avg-1g", "Minus One Gee Avg",              0.0 },
-      { "std-1g", "Minus One Gee Std Dev",          0.0 },
-      { "fid(0)", "Finite Difference on [ -1, 0 ]", 0.0 },
-      { "avg0g",  "Zero Gee Avg",                   0.0 },
-      { "std0g",  "Zero Gee Std Dev",               0.0 },
-      { "fid(1)", "Finite Difference on [ 0, 1 ]",  0.0 },
-      { "avg+1g", "Plus One Gee Avg",               0.0 },
-      { "std+1g", "Plus One Gee Std Dev",           0.0 },
-      { "do/dg",  "Slope of AltAcc Output per G",   0.0 },
-      { "y[0]",   "Y-Intercept of AltAcc Output",   0.0 },
-      { "ccoff",  "Correlation Coefficient",        0.0 },
-      { "xducer", "Motorola Pressure XDucer Type",  0.0 },
+cal_info = {
+    "ActAlt": ("actalt", "Actual Altitude",                0.0),
+    "ActBP": ("actbp",  "Actual Barometric Pressure",     0.0),
+    "AvgBP": ("avgbp",  "AltAcc Pressure Avg",            0.0),
+    "StDBP": ("stdbp",  "AltAcc Pressure Std Dev",        0.0),
+    "OffBP": ("offbp",  "Barometric Pressure Offset",     0.0),
+    "GainBP": ("gainbp", "Barometric Pressure Gain Factor", 1.0),
+    "AvgNegG": ("avg-1g", "Minus One Gee Avg",              0.0),
+    "StdNegG": ("std-1g", "Minus One Gee Std Dev",          0.0),
+    "FiDNegG": ("fid(0)", "Finite Difference on [ -1, 0 ]", 0.0),
+    "AvgZeroG": ("avg0g",  "Zero Gee Avg",                   0.0),
+    "StDZeroG": ("std0g",  "Zero Gee Std Dev",               0.0),
+    "FiDZeroG": ("fid(1)", "Finite Difference on [ 0, 1 ]",  0.0),
+    "AvgOneG": ("avg+1g", "Plus One Gee Avg",               0.0),
+    "StDOneG": ("std+1g", "Plus One Gee Std Dev",           0.0),
+    "Slope": ("do/dg",  "Slope of AltAcc Output per G",   0.0),
+    "YZero": ("y[0]",   "Y-Intercept of AltAcc Output",   0.0),
+    "CCoff": ("ccoff",  "Correlation Coefficient",        0.0),
+    "XDucer": ("xducer", "Motorola Pressure XDucer Type",  0.0),
+}
+
+nit_tags = [
+    "port",
+    "time",
+    "alt",
+    "vel",
+    "acc",
+    "press",
+    "cal",
+    "xducer"
 ]
 
-ActAlt     0
-ActBP      1
-AvgBP      2
-StDBP      3
-OffBP      4
-GainBP     5
-AvgNegG    6
-StDNegG    7
-FiDNegG    8
-AvgZeroG   9
-StDZeroG  10
-FiDZeroG  11
-AvgOneG   12
-StDOneG   13
-Slope     14
-YZero     15
-CCoff     16
-XDucer    17
+INP_SIZE = 256
+MAXARG = 3
 
-   typedef  struct   NitData
+TICK_CHAR = 0xFE
+COMMENT_CHAR = '#'
+ALTACC_DUMP_LEN = 8196
+KEY_INP_MAX = 256
+
+DEFAULT_GAIN = 2.5500    # +/- 50 G over 255 units
+GEE = 32.17              # you know, Newton and all
+dT = 0.0625              # AltAcc dt
+TWO_dT = 0.1250          # 2 * dT for 2-step derivs
+TWELVE_dT = 0.7500       # 12 * dT for Taylors 2step
+dT_3 = 0.02083333333333  # dT / 3 for Simpson
+
+TIME_END = 5.000         # end report @ down+5 (v2)
+TIME_MAX = 255.125       # end report @ down+5 (v2)
+
+PRT_REG = 0
+PRT_CSV = 1
+
+LAUNCH_THOLD = 16.0      # about 1/4 sec of 1.33 G
+
+
+
+
+
+
+""" this is the structure of the AltAcc Header ( 32 bytes )
+
+   typedef  struct   AltAccDump
    {
-      char * Tag ;
-      int    Ptr ;
-   }  NitData ;
+      byte  Version   ;                /* Starting at v2-125, we have V! */
+      byte  kjh_toy [3] ;              /* play data for 'special models' */
+      byte  DrogueSec ;                /* Time of Drogue Deploy, Seconds */
+      byte  Drogue16s ;                /* Time of Drogue Deploy, 1/16sec */
+      byte  DrogueAcc ;                /* Accel at Drogue Deploy         */
+      byte  DroguePre ;                /* Pressure at Drogue Deploy      */
+      byte  MainSec ;                  /* Time of Main Deploy, Seconds   */
+      byte  Main16s ;                  /* Time of Main Deploy, 1/16sec   */
+      byte  MainAcc ;                  /* Accel at Main Deploy           */
+      byte  MainPre ;                  /* Pressure at Main Deploy        */
+      byte  BSFlags ;                  /* AltAcc Launch Status Flags     */
+      byte  BasePre ;                  /* Pressure Reading, Win [Ptr]    */
+      byte  LastPre ;                  /* Pressure Reading, Win [Ptr+3]  */
+      byte  WinPtr  ;                  /* Pointer to Beginning of Win [] */
+      byte  Window [4] ;               /* 4-byte circular buffer, Accel  */
+      byte  AvgAcc ;                   /* Average of Window [] Data      */
+      byte  NitAcc [4];                /* T={1,2,3,4} / 16 (Liftoff Acc) */
+      byte  SumLob ;                   /* Lo Byte of Sum of NitAcc []    */
+      byte  SumHib ;                   /* Hi Byte of Sum of NitAcc []    */
+      byte  foo2 [5] ;                 /* Reserved                       */
+      AP    Data [ NUM_PAIRS ] ;       /* This is the 8160 Byte Flight   */
+      byte  CkSumLob ;                 /* AltAcc's Version of check sum  */
+      byte  CkSumHib ;                 /* Hi Byte of same                */
+      byte  O ;                        /* AltAcc sez 'O'                 */
+      byte  K ;                        /* AltAcc sez 'K'                 */
 
-   NitData NitTags [ ] =
+   } AltAccDump ;
+
+   union DataBuf
    {
-      { "none",   0 },
-      { "port",   1 },
-      { "time",   2 },
-      { "alt",    3 },
-      { "vel",    4 },
-      { "acc",    5 },
-      { "press",  6 },
-      { "cal",    7 },
-      { "xducer", 8 },
-   } ;
-
-NUM_NIT_TAGS   ( sizeof ( NitTags ) / sizeof ( NitData ))
-
-NT_PORT     1
-NT_TIME     2
-NT_ALT      3
-NT_VEL      4
-NT_ACC      5
-NT_PRESS    6
-NT_CAL      7
-NT_XDUCER   8
-
-INP_SIZE                 256
-MAXARG                   3
-
-TICK_CHAR              0xFE
-COMMENT_CHAR           '#'
-ALTACC_DUMP_LEN        8196
-KEY_INP_MAX            256
-
-DEFAULT_GAIN            2.5500        /* +/- 50 G over 255 units  */
-GEE                    32.17          /* you know, Newton and all */
-dT                      0.0625        /* AltAcc dt                */
-TWO_dT                  0.1250        /* 2 * dT for 2-step derivs */
-TWELVE_dT               0.7500        /* 12 * dT for Taylors 2step*/
-dT_3                    0.02083333333333 /* dT / 3 for Simpson    */
-
-#define  TIME_END                5.000          /* end report @ down+5 (v2) */
-#define  TIME_MAX              255.125          /* end report @ down+5 (v2) */
-
-#define  PRT_REG                 0
-#define  PRT_CSV                 1
-
-#define  LAUNCH_THOLD            16.0           # about 1/4 sec of 1.33 G
+      struct   AltAccDump  Name ;
+      byte                 Byte [ ALTACC_FILE_SIZE ] ;
+   }  AltAccFile ;
 """
-   void           Breaker ( int );              /* Fun () Prototypes        */
-   void           SafeOut ( char * );
-   int            SafeIn ( void );
-   void           CleanUp ( void ) ;
-   void           Usage ( void ) ;
-   char           YesNo ( char * ) ;
-   void           Exit_YesNo ( char * ) ;
-   void           Sleep ( double ) ;
-   u16            Parse ( char *, u16, char * * ) ;
-   char         * ToLower ( char * ) ;
-   int            IsInList ( byte, char * ) ;
-   char         * GetMyName ( char *, char * ) ;
-   char         * GetMyHome ( char *, char * ) ;
-   void           HexDump ( byte *, u16 ) ;
-   double         Calibrate ( char * ) ;
-   int            SlurpData ( char *, char * ) ;
-   double         Palt ( double, double ) ;
-   int            Cursor ( int, int ) ;
-   double         Trapeziod ( int, double *, double ) ;
-   double         Simpson   ( int, double *, double ) ;
-   double         Taylor    ( int, double *, double ) ;
-   char         * FMode ( byte ) ;
-   void           Initialize ( char * ) ;
-   int            FindFile ( char *, char *, char *, int ) ;
+
+
+altacc_format = struct.Struct("<B3x4B4BBBBB4sB4sBB5x8160sH2s")
+AltAccDump = namedtuple('AltAccDump',
+                        "Version DrogueSec Drogue16s DrogueAcc DroguePre "
+                        "MainSec Main16s MainAcc MainPre BSFlags BasePre "
+                        "LastPre WinPtr Window AvgAcc NitAcc SumLob SumHib Data CkSum OK")
+
+
+def read_datafile(path: str):
+    """ read a flite data file and unpack it """
+
+    with open(path, 'rb') as fp:
+        data = fp.read()
+
+    checksum = sum(data[:-4]) % 0x10000
+    fields = altacc_format.unpack(data)
+    flite = AltAccDump._make(fields)
+    print(flite, altacc_format.size, checksum, sum(flite.NitAcc))
+
+
+read_datafile('sample.dat')
+
+
+
+parser = argparse.ArgumentParser(prog='produce', description=f'AltAcc data reduction program (v{VERSION}')
+parser.add_argument('-c', '--cal', default=CAL_NAME, help='calibration (probate) filename')
+parser.add_argument('-n', '--nit', default=NIT_NAME, help='override init filename')
+parser.add_argument('-f', '--data', help='AltAcc data (proread) filename')
+parser.add_argument('-o', '--out', help='output results filename')
+
+parser.add_argument('-z', '--zor', action='store', help='one gee override value (overrides data file one gee)')
+parser.add_argument('-g', '--gain', action='store', help='gain override (overrides cal file gain value)')
+parser.add_argument('-F', '--fmt', action='store', default='A', help='output file format (C)SV (A)SCII')
+parser.add_argument('-m', '--nomsl', action='store_true', help='do not show MSL pressure alt along with AGL')
+parser.add_argument('-a', '--all', action='store_true', help='force all the data out, even after touchdown')
+parser.add_argument('-q', '--quiet', action='store_true', help="be quiet about it")
+parser.add_argument('--version', action='version', version=f'v{VERSION}')
+parser.add_argument('datafile', default=None, nargs='?', action='store', help='data filename')
+
+parser.print_usage()
+parser.print_help()
+
+
+
+
+
+
+
+
+
 """
    /* small model MSC compiler won't handle this in the main */
 
@@ -328,12 +322,6 @@ int main ( argc, argv )
 
    /* ver 1.25c print everything to stdout cause DOS can't manage stderr */
 
-#ifdef DOS
-   kjherr = stdout ;
-#else
-   kjherr = stderr ;
-#endif
-
    /* get the prog name from the opsys in there -- call Name, then Home! */
 
    progname = GetMyName ( progname, argv [0] ) ;      /* note order!!! */
@@ -361,70 +349,6 @@ int main ( argc, argv )
 
    /* look for command line flags */
 
-   while ( 1 )
-   {
-      o = getopt ( argc, argv, "c:f:o:g:z:n:F:aqhm" ) ;
-
-      if ( o == EOF )
-        break ;
-
-      switch (o)
-      {
-         case 'c':
-            strncpy ( CalFileName, optarg, NAME_LEN_MAX );
-            break ;
-
-         case 'f':
-            strncpy ( InpFileName, optarg, NAME_LEN_MAX );
-            break ;
-
-         case 'o':
-            strncpy ( OutFileName, optarg, NAME_LEN_MAX );
-            break ;
-
-         case 'g':
-            goride = atof ( optarg ) ;
-            break ;
-
-         case 'z':
-            zoride = atof ( optarg ) ;
-            break ;
-
-         case 'n':
-            strncpy ( NitFileName, optarg, NAME_LEN_MAX );
-            break ;
-
-         case 'F':
-
-            if (( * optarg == 'x' ) || ( * optarg == 'X' ) ||
-                ( * optarg == 'c' ) || ( * optarg == 'C' ))
-                  PrtFmt = PRT_CSV ;
-            else
-                  PrtFmt = PRT_REG ;
-
-            break ;
-
-         case 'm':
-            DoMSL = FALSE ;
-            break ;
-
-         case 'a':
-            end_t_oride = TRUE ;
-            break ;
-
-         case 'h':
-            Usage () ;
-            break ;
-
-         case 'q':
-            Verbose = FALSE ;
-            break ;
-
-         case '?':
-            Usage () ;
-            break ;
-      }
-   }
 
    /* go read the .nit file -- watch for Overrides (v2) */
 
@@ -953,81 +877,6 @@ int main ( argc, argv )
 
 }
 /* ------------------------------------------------------------------------ */
-void  Usage ()
-/* ------------------------------------------------------------------------ */
-{
-   fprintf ( kjherr, "%s (v%s) -- AltAcc data reduction program\n",
-             progname, VERSION ) ;
-   fprintf ( kjherr, "Usage:  %s [options] FILE\n", progname );
-   fprintf ( kjherr, "options include:\n" );
-   fprintf ( kjherr, "        -c FILE -> Calibration File produced by probate\n" );
-   fprintf ( kjherr, "        -f FILE -> AltAcc data file produced by proread\n" );
-   fprintf ( kjherr, "        -n FILE -> Override default init file prodata.nit with FILE\n" );
-   fprintf ( kjherr, "        -o FILE -> Output file for produce results\n" );
-   fprintf ( kjherr, "        -z VAL  -> One Gee Override Value ( Overrides Cal File One Gee )\n" );
-   fprintf ( kjherr, "        -g VAL  -> Gain Override ( Overrides Cal File Gain Factor )\n" );
-   fprintf ( kjherr, "        -F FMT  -> if FMT = c or C or x or X then print comma\n" );
-   fprintf ( kjherr, "                   separated values ( ala an Xcel csv file )\n" );
-   fprintf ( kjherr, "                   Otherwise print a table of data with headers (default)\n" );
-/* fprintf ( kjherr, "        -m      -> Output BOTH MSL pressure alt AND AGL pressure alt\n" ); */
-   fprintf ( kjherr, "        -m      -> Do NOT show MSL pressure alt with AGL pressure alt\n" );
-   fprintf ( kjherr, "        -a      -> Force all the data out, even after touchdown\n" );
-   fprintf ( kjherr, "        -q      -> be quiet about it\n" );
-   fprintf ( kjherr, "        -h      -> help ( this list )\n" );
-   fprintf ( kjherr, "           FILE -> FILE == AltAcc data file produced by proread\n" );
-   fprintf ( kjherr, "                           ( same effect as the -f FILE option )\n" );
-
-   exit ( 6 ) ;
-}
-/* ------------------------------------------------------------------------ */
-void   CleanUp ()
-/* ------------------------------------------------------------------------ */
-{
-   /* atexit was exec'd after we took the [Ctrl][Break] IRQ ... so ...      */
-
-   signal ( SIGINT, SIG_IGN );          /* let dos do whatever it do        */
-}
-/* ------------------------------------------------------------------------ */
-void  Breaker ( sig )
-/* ------------------------------------------------------------------------ */
-      int   sig ;
-/* ------------------------------------------------------------------------ */
-{
-   /* A signal handler must take a single argument. The argument can be
-    * tested within the handler and thus allows a single signal handler
-    * to handle several different signals. In this case, the parameter
-    * is included to keep the compiler from generating a warning but is
-    * ignored because this signal handler only handles one interrupt:
-    * SIGINT (Ctrl+C).
-    */
-
-   /* Disallow CTRL+C during handler. */
-
-   signal ( SIGINT, SIG_IGN );
-
-   Exit_YesNo ( "Break Detected - abort processing (y|n)? " );
-
-   /* The CTRL+C interrupt must be reset to our handler since
-    * by default it is reset to the system handler.
-    */
-
-   signal ( SIGINT, Breaker );
-}
-/* ------------------------------------------------------------------------ */
-void   SafeOut ( str )         /* Outputs a string using system level calls. */
-/* ------------------------------------------------------------------------ */
-      char *str ;
-/* ------------------------------------------------------------------------ */
-{
-   fputs ( str, stdout ) ;
-}
-/* ------------------------------------------------------------------------ */
-int   SafeIn ()             /* Inputs a character using system level calls. */
-/* ------------------------------------------------------------------------ */
-{
-   return ( fgetc ( stdin )) ;
-}
-/* ------------------------------------------------------------------------ */
 char  YesNo ( Mess )
 /* ------------------------------------------------------------------------ */
       char * Mess   ;
@@ -1056,22 +905,6 @@ void   Exit_YesNo ( Mess )
 {
    if ( YesNo ( Mess ) == 'y' )
       exit ( 3 ) ;
-}
-/* ------------------------------------------------------------------------ */
-void Sleep ( wait )
-/* ------------------------------------------------------------------------ */
-     double   wait ;
-/* ------------------------------------------------------------------------ */
-{
-    time_t start, goal ;
-
-    time ( & start ) ;
-
-    do
-    {
-        time ( & goal ) ;
-
-    } while (( difftime ( goal, start )) < wait ) ;
 }
 /* ------------------------------------------------------------------------ */
 u16   Parse (line, maxarg, word)
@@ -1109,25 +942,6 @@ u16   Parse (line, maxarg, word)
 }
 
 /* ------------------------------------------------------------------------ */
-char  * ToLower ( InStr )
-/* ------------------------------------------------------------------------ */
-      char * InStr ;
-/* ------------------------------------------------------------------------ */
-{
-   u16   i = 0 ;
-
-   while ( i < strlen ( InStr ))
-   {
-      if ( isupper ( InStr [ i ] ))
-         InStr [ i ]  = tolower ( InStr [ i ] ) ;
-
-      i ++ ;
-   }
-
-   return ( InStr ) ;
-
-}
-/* ------------------------------------------------------------------------ */
 char  * GetMyName ( Name,  ArgV )
 /* ------------------------------------------------------------------------ */
       char * Name ;
@@ -1155,21 +969,6 @@ char  * GetMyName ( Name,  ArgV )
 
    return ( ToLower ( Name )) ;
 
-}
-/* ------------------------------------------------------------------------ */
-int  IsInList ( Char, List )
-/* ------------------------------------------------------------------------ */
-      byte   Char ;
-      char * List ;
-/* ------------------------------------------------------------------------ */
-{
-   int i = 0 ;
-
-   for ( i = 0 ; i < strlen ( List ) ; i ++ )
-      if ( Char == List [i] )
-         return ( 1 ) ;
-
-   return ( 0 ) ;
 }
 /* ------------------------------------------------------------------------ */
 char  * GetMyHome ( Path,  ArgV )
@@ -1614,3 +1413,4 @@ int FindFile ( char * FileBuf, char * HomeDir, char * WhatName, int Mode )
    return ( 0 ) ;
 }
 
+"""
