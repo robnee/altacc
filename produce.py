@@ -87,24 +87,24 @@ PALT_OFFSET_5100 = 1.475092     # this is 40 mV / KPa
 # PALT_OFFSET_5100 -0.478599     /* this is from test1      */
 
 cal_info = {
-    "ActAlt": ("actalt", "Actual Altitude",                0.0),
-    "ActBP": ("actbp",  "Actual Barometric Pressure",     0.0),
-    "AvgBP": ("avgbp",  "AltAcc Pressure Avg",            0.0),
-    "StDBP": ("stdbp",  "AltAcc Pressure Std Dev",        0.0),
-    "OffBP": ("offbp",  "Barometric Pressure Offset",     0.0),
+    "ActAlt": ("actalt", "Actual Altitude",              0.0),
+    "ActBP": ("actbp", "Actual Barometric Pressure",     0.0),
+    "AvgBP": ("avgbp", "AltAcc Pressure Avg",            0.0),
+    "StDBP": ("stdbp", "AltAcc Pressure Std Dev",        0.0),
+    "OffBP": ("offbp", "Barometric Pressure Offset",     0.0),
     "GainBP": ("gainbp", "Barometric Pressure Gain Factor", 1.0),
     "AvgNegG": ("avg-1g", "Minus One Gee Avg",              0.0),
     "StdNegG": ("std-1g", "Minus One Gee Std Dev",          0.0),
-    "FiDNegG": ("fid(0)", "Finite Difference on [ -1, 0 ]", 0.0),
-    "AvgZeroG": ("avg0g",  "Zero Gee Avg",                   0.0),
-    "StDZeroG": ("std0g",  "Zero Gee Std Dev",               0.0),
-    "FiDZeroG": ("fid(1)", "Finite Difference on [ 0, 1 ]",  0.0),
-    "AvgOneG": ("avg+1g", "Plus One Gee Avg",               0.0),
-    "StDOneG": ("std+1g", "Plus One Gee Std Dev",           0.0),
-    "Slope": ("do/dg",  "Slope of AltAcc Output per G",   0.0),
-    "YZero": ("y[0]",   "Y-Intercept of AltAcc Output",   0.0),
-    "CCoff": ("ccoff",  "Correlation Coefficient",        0.0),
-    "XDucer": ("xducer", "Motorola Pressure XDucer Type",  0.0),
+    "FiDNegG": ("fid(0)", "Finite Difference on [-1, 0]", 0.0),
+    "AvgZeroG": ("avg0g", "Zero Gee Avg",                 0.0),
+    "StDZeroG": ("std0g", "Zero Gee Std Dev",             0.0),
+    "FiDZeroG": ("fid(1)", "Finite Difference on [0, 1]", 0.0),
+    "AvgOneG": ("avg+1g", "Plus One Gee Avg",             0.0),
+    "StDOneG": ("std+1g", "Plus One Gee Std Dev",         0.0),
+    "Slope": ("do/dg", "Slope of AltAcc Output per G",   0.0),
+    "YZero": ("y[0]", "Y-Intercept of AltAcc Output",   0.0),
+    "CCoff": ("ccoff", "Correlation Coefficient",        0.0),
+    "XDucer": ("xducer", "Motorola Pressure XDucer Type", 0.0),
 }
 
 nit_tags = [
@@ -140,8 +140,6 @@ PRT_REG = 0
 PRT_CSV = 1
 
 LAUNCH_THOLD = 16.0      # about 1/4 sec of 1.33 G
-
-
 
 
 
@@ -208,7 +206,6 @@ def read_datafile(path: str):
 read_datafile('sample.dat')
 
 
-
 parser = argparse.ArgumentParser(prog='produce', description=f'AltAcc data reduction program (v{VERSION}')
 parser.add_argument('-c', '--cal', default=CAL_NAME, help='calibration (probate) filename')
 parser.add_argument('-n', '--nit', default=NIT_NAME, help='override init filename')
@@ -226,9 +223,6 @@ parser.add_argument('datafile', default=None, nargs='?', action='store', help='d
 
 parser.print_usage()
 parser.print_help()
-
-
-
 
 
 
@@ -877,71 +871,6 @@ int main ( argc, argv )
 
 }
 /* ------------------------------------------------------------------------ */
-char  YesNo ( Mess )
-/* ------------------------------------------------------------------------ */
-      char * Mess   ;
-/* ------------------------------------------------------------------------ */
-{
-   int  c ;
-   char str [] = " " ;
-
-   SafeOut ( Mess );                    /* ask dos to dump the message */
-
-   c = SafeIn ();                       /* ask dos for an input char   */
-   str [0] = c;                         /* make a string out of it ... */
-   SafeOut ( str );                      /* and ask dos to dump it      */
-   SafeOut ( "\r\n" );
-
-   if ( isupper ( c ))
-      c = tolower ( c ) ;
-
-   return ( c ) ;
-}
-/* ------------------------------------------------------------------------ */
-void   Exit_YesNo ( Mess )
-/* ------------------------------------------------------------------------ */
-      char * Mess   ;
-/* ------------------------------------------------------------------------ */
-{
-   if ( YesNo ( Mess ) == 'y' )
-      exit ( 3 ) ;
-}
-/* ------------------------------------------------------------------------ */
-u16   Parse (line, maxarg, word)
-/* ------------------------------------------------------------------------ */
-      char * line;
-      u16    maxarg;
-      char * word [];
-/* ------------------------------------------------------------------------ */
-
-{
-   u16      i = 0;
-   char   * j = line + strlen (line);
-
-   while (( line < j ) && ( i < maxarg ))
-   {
-      while (( line < j ) && ( isspace ( *line )))
-         line++ ;
-
-      if (( line >= j ) || ( *line == COMMENT_CHAR ))
-         break;
-
-      word [ i++ ] = line;
-
-      while (( line < j ) && !( isspace ( *line )))
-         line++ ;
-
-      if ( line >= j )
-         break;
-
-      *line++ = '\0';
-  }
-
-  return ( i ) ;
-
-}
-
-/* ------------------------------------------------------------------------ */
 char  * GetMyName ( Name,  ArgV )
 /* ------------------------------------------------------------------------ */
       char * Name ;
@@ -1038,70 +967,16 @@ char  * GetMyHome ( Path,  ArgV )
       return ( "." ) ;
 
 }
-/* ------------------------------------------------------------------------ */
-void  HexDump ( Pointer, Length )
-/* ------------------------------------------------------------------------ */
-      byte * Pointer ;
-      u16    Length ;
-/* ------------------------------------------------------------------------ */
-{
-   u16   i = 0 ;
-   u16   j = 0 ;
+"""
+def Calibrate(CalFile):
+    logging.info(f"opening calibration file {CalFile}")
 
-   for ( i = 0 ; i < Length ; i ++ )
-   {
-      if (( i % 16 ) == 0 )
-         fprintf ( kjherr, "%04x    ", i ) ;
-
-      fprintf ( kjherr, "%02x ", Pointer [ i ] ) ;
-
-      if (( i % 16 ) == 7 )
-         fprintf ( kjherr, " " ) ;
-
-      if (( i % 16 ) == 15 )
-      {
-         fprintf ( kjherr, "    " ) ;
-
-         for ( j = i-15 ; j <=i ; j ++ )
-         {
-            if ( isprint ( Pointer [ j ] ))
-               fprintf ( kjherr, "%c", Pointer [ j ] ) ;
-            else
-               fprintf ( kjherr, "." ) ;
-         }
-         fprintf ( kjherr, "\n" ) ;
-      }
-
-      if (( i % 320 ) == 319 )
-         if (( YesNo ( "\n[More] Press q to quit " )) == 'q' )
-            break ;
-
-   }
-
-}
-/* ------------------------------------------------------------------------ */
-double   Calibrate ( char * CalFile )
-/* ------------------------------------------------------------------------ */
-{
-   FILE * CalFilePtr ;
-
-   u16   i = 0 ;
-
-   char     InpBuf [ INP_SIZE+1 ] ;
-   char  *  ArgBuf [ MAXARG ] ;
-
-   if ( Verbose )
-      fprintf ( kjherr, "opening calibration file     %s\n", CalFile ) ;
-
-   if (( CalFilePtr = fopen ( CalFile, "r" )) == NULL )
-   {
-      fprintf ( kjherr, "%s cannot open calibration file %s for input\n",
-                          progname, CalFile ) ;
-      exit ( 4 ) ;
-   }
-
-   while ( ! feof ( CalFilePtr ))
-   {
+    with open(CalFile) as fp:
+        for line in fp.readlines():
+            if '#' in line:
+                line, comment = line.split('#', maxsplit
+            line = line.strip()
+            line = 
       if ( fgets ( InpBuf, INP_SIZE, CalFilePtr ) != NULL )
       {
          if ( Parse ( InpBuf, MAXARG, ArgBuf ) > 1 )
@@ -1112,11 +987,6 @@ double   Calibrate ( char * CalFile )
 
             if ( i < NUM_CAL_ROWS )
                CaliData [i].Val = atof ( ArgBuf [ 1 ] ) ;
-         }
-      }
-   }
-
-   fclose ( CalFilePtr ) ;
 
    /* Version 1.25 -- use the offset from the .cal file so actbp is on */
 
@@ -1127,8 +997,7 @@ double   Calibrate ( char * CalFile )
 
    return ( CaliData [ Slope ].Val );
 
-}
-/*--------------------------------------------------------------------------*/
+"""
 double  Palt ( Press, Press_0 )
 /*--------------------------------------------------------------------------*/
       double Press   ;
@@ -1341,59 +1210,6 @@ void  Initialize ( char * NitFile )
    */
 }
 /* ------------------------------------------------------------------------ */
-int SlurpData ( char * InpFile, char * OutFile )
-/* ------------------------------------------------------------------------ */
-{
-
-   FILE * InpPtr ;
-
-   int BytesRead = 0 ;
-
-   if ( strlen ( InpFile ) == 0 )
-      Usage () ;
-   else
-   {
-      /* make sure input file != output file */
-
-      if ( strcmp ( InpFile, OutFile ) == 0 )
-      {
-         fprintf ( kjherr,
-                  "\n%s will simply NOT overwrite your input file!\n",
-                   progname ) ;
-
-         exit ( 4 ) ;
-      }
-
-      /* can we open the inp file ? */
-
-      if (( InpPtr = fopen ( InpFile, "rb" )) == NULL )
-      {
-         fprintf ( kjherr, "\n%s cannot open data file %s for input\n",
-                   progname,
-                   InpFile ) ;
-         exit ( 4 ) ;
-      }
-   }
-
-   /* slurp the data into the buffer union */
-
-   BytesRead = fread ( & AltAccFile.Byte [0], sizeof ( byte ),
-                         ALTACC_FILE_SIZE,    InpPtr ) ;
-
-   if ( Verbose )
-   {
-      fprintf ( kjherr, "read %d bytes from         %s\n",
-                BytesRead,
-                InpFile );
-   }
-
-   /* close the input file */
-
-   fclose ( InpPtr ) ;
-
-   return ( BytesRead ) ;
-}
-/* ------------------------------------------------------------------------ */
 int FindFile ( char * FileBuf, char * HomeDir, char * WhatName, int Mode )
 /* ------------------------------------------------------------------------ */
 {
@@ -1414,3 +1230,4 @@ int FindFile ( char * FileBuf, char * HomeDir, char * WhatName, int Mode )
 }
 
 """
+
