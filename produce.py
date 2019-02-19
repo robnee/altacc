@@ -307,49 +307,26 @@ def pressure_alt(press, press_0, cal):
 
 def main():
 
-    DoMSL = True
-    maxp = 0
-
-    vel = 0.0  # temp accum for sum */
-
     dalt = 0.0                      # differential alt   */
 
-    ptime = 0.0                     # apogee time PAlt */
-    atime = 0.0                     # apogee time IAlt */
     flight_time = [0.0, 0.0]        # firing times */
 
     maxialt = 0.0                   # max inertial alt   */
     tmaxialt = 0.0                  # time of max i-alt  */
-
     maxpalt = 0.0                   # press alt at minvel*/
 
     maxvel = 0.0
     tmaxvel = 0.0
-
     minacc = 0.0
     tminacc = -1.0                  # tminacc controls derivative mode
     maxacc = 0.0
     tmaxacc = 0.0
 
-    alt_0 = 0                       # launch site alt    */
-    palt_0 = 0                      # result varb, Palt()*/
-    palt = 0                        # result varb, Palt()*/
-
     end_of_time = TIME_MAX          # All the data (v2)  */
     end_t_oride = False             # or not ... (v2)    */
 
-    pre = 0                         # pressure byte temp */
-    gee = 0                         # tmp for AltAcc gee */
-
     launch = 0                      # set when gsum>thold*/
     atime_oride = 0                 # set when gsum = 0  */
-
-    gain = DEFAULT_GAIN             # aka slope of curve */
-    onegee = 0.0                    # AltAcc output @ +1 */
-    zerogee = 0.0                   # AltAcc output @ 0G */
-    neggee = 0.0                    # AltAcc output @ -1 */
-
-    goffset = 0.0                   # experimental ...   */
 
     parse_commandline()
     print(args)
@@ -394,17 +371,19 @@ def main():
     else:
         ver = "AltAcc II"
 
+    gain = DEFAULT_GAIN             # aka slope of curve */
     if args.gain:
         gain = float(args.gain)
 
+    onegee = 0.0                    # AltAcc output @ +1 */
     if args.zor:
         onegee = float(args.zor)
     else:
         onegee = sum(flight.Window) / 4.0
-
-    zerogee = onegee - gain
-    neggee = zerogee - gain
-    goffset = onegee
+           
+    zerogee = onegee - gain         # AltAcc output @ 0G */
+    neggee = zerogee - gain         # AltAcc output @ -1 */
+    goffset = onegee                # experimental ...   */
 
     # pre = ( byte ) floor ( CaliData [ AvgBP ].Val ) ;
     # /*
@@ -417,8 +396,10 @@ def main():
     # v1.25 */
     # TODO: display these?
     palt_0 = (29.921 - cal['OffBP']) / cal['GainBP']
+    # launch site alt
     alt_0 = pressure_alt(flight.BasePre, palt_0, cal)
-
+    atime = 0.0                     # apogee time IAlt */
+    
     flight_mode = flight.BSFlags & 0x01
 
     flight_time[0] = flight.MainSec + (flight.Main16s & 0xE0) * 8.0 + (flight.Main16s & 0x0F) / 16.0
@@ -439,8 +420,8 @@ def main():
         flight_time[1] = -1.0
         atime = flight_time[0]
         maxp = flight.MainPre
-
-    ptime = atime
+    
+    ptime = atime                   # apogee time PAlt */
 
     def report1(fp, com=''):
         print("%s" % com, file=fp)
@@ -632,7 +613,6 @@ def main():
      }
     """
 
-    print(pressure_alt(0, 236, cal))
     if args.out:
         for i, t in enumerate(tee):
             palt = pressure_alt(pre[i], flight.BasePre, cal) or 0.0
@@ -649,77 +629,30 @@ def main():
                     print(",,,%.0f", end='', file=outf)
 
 
-"""
-maxpalt = Palt ( maxp, AltAccFile.Name.BasePre ) ;
+    maxpalt = pressure_alt(maxp, flight.BasePre, cal)
+    msl_alt = pressure_alt(maxp, palt_0, cal) - alt_0
 
-fprintf ( kjherr, "\n" ) ;
+    def report2(fp, com='# '):
+        if not args.nomsl:
+            print("%sMSL Pressure Altitude:    %6.0f    %s         ( %9.5f sec )" %
+                  (com, msl_alt, UNITS[U['alt']], ptime), file=fp)
+        print("%sAGL Pressure Altitude:    %6.0f    %s         ( %9.5f sec )" %
+              (com, maxpalt, UNITS[U['alt']], ptime), file=fp)
+        print("%sMax Inertial Altitude:    %6.0f    %s         ( %9.5f sec )" %
+              (com, maxialt, UNITS[U['alt']], tmaxialt), file=fp)
+        print("%sMaximum Velocity:         %8.1f  %s / %s   ( %9.5f sec )" %
+              (com, maxvel, UNITS[U['alt']], UNITS[U['time']], tmaxvel), file=fp)
+        print("%sMaximum Acceleration:     %9.2f %s / %s^2 ( %9.5f sec, %5.1f G's )" %
+              (com, maxacc, UNITS[U['alt']], UNITS[U['time']], tmaxacc, maxacc/GEE), file=fp)
+        print("%sMinimum Acceleration:     %9.2f %s / %s^2 ( %9.5f sec, %5.1f G's )" %
+              (com, minacc, UNITS[U['alt']], UNITS[U['time']], tminacc, minacc/GEE), file=fp)
 
-if ( DoMSL )
-{
- fprintf ( kjherr,
-          "MSL Pressure Altitude:    %6.0f    %s         ( %9.5f sec )\n",
-          Palt ( maxp, palt_0 ) - alt_0, Units [ U[ 0 ]], ptime );
-}
-fprintf ( kjherr,
-       "AGL Pressure Altitude:    %6.0f    %s         ( %9.5f sec )\n",
-        maxpalt, Units [ U[ 0 ]], ptime );
-fprintf ( kjherr,
-       "Max Inertial Altitude:    %6.0f    %s         ( %9.5f sec )\n",
-        maxialt, Units [ U[ 0 ]], tmaxialt );
-fprintf ( kjherr,
-       "Maximum Velocity:         %8.1f  %s / %s   ( %9.5f sec )\n",
-        maxvel, Units [ U[ 0 ]], Units [ U[ 2 ]], tmaxvel );
-fprintf ( kjherr,
-       "Maximum Acceleration:     %9.2f %s / %s^2 ( %9.5f sec, %5.1f G's )\n",
-        maxacc, Units [ U[ 0 ]], Units [ U[ 2 ]],
-        tmaxacc, maxacc/GEE ) ;
-fprintf ( kjherr,
-       "Minimum Acceleration:     %9.2f %s / %s^2 ( %9.5f sec, %5.1f G's )\n",
-        minacc, Units [ U[ 0 ]], Units [ U[ 2 ]],
-        tminacc, minacc/GEE );
+    if args.out:
+        if args.fmt == 'A':
+            report2(outf)
+        close(outf)
 
-if ( OutFileUsed )
-{
- if ( PrtFmt == PRT_REG )
- {
-
- fprintf ( OutFileAddr, "%c\n",
-           COMMENT_CHAR ) ;
-
- if ( DoMSL )
- {
-    fprintf ( OutFileAddr,
-             "%c MSL Pressure Altitude: %6.0f    %s         ( %9.5f sec )\n",
-             COMMENT_CHAR,
-             Palt ( maxp, palt_0 ) - alt_0, Units [ U[ 0 ]], ptime );
- }
- fprintf ( OutFileAddr,
-          "%c AGL Pressure Altitude: %6.0f    %s         ( %9.5f sec )\n",
-           COMMENT_CHAR, maxpalt, Units [ U[ 0 ]], ptime );
- fprintf ( OutFileAddr,
-          "%c Max Inertial Altitude: %6.0f    %s         ( %9.5f sec )\n",
-           COMMENT_CHAR, maxialt, Units [ U[ 0 ]], tmaxialt );
- fprintf ( OutFileAddr,
-          "%c Maximum Velocity:      %8.1f  %s / %s   ( %9.5f sec )\n",
-           COMMENT_CHAR, maxvel, Units [ U[ 0 ]],
-           Units [ U[ 2 ]], tmaxvel );
- fprintf ( OutFileAddr,
-          "%c Maximum Acceleration:  %9.2f %s / %s^2 ( %9.5f sec, %5.1f G's )\n",
-           COMMENT_CHAR, maxacc, Units [ U[ 0 ]],
-           Units [ U[ 2 ]], tmaxacc, maxacc/GEE ) ;
- fprintf ( OutFileAddr,
-          "%c Minimum Acceleration:  %9.2f %s / %s^2 ( %9.5f sec, %5.1f G's )\n",
-           COMMENT_CHAR, minacc, Units [ U[ 0 ]],
-           Units [ U[ 2 ]], tminacc, minacc/GEE );
- }
-
- fclose ( OutFileAddr ) ;
-}
-
-exit ( 0 ) ;
-
-}
-"""
+    report2(sys.stdout, com='')
 
 
 main()
