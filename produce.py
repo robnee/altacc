@@ -415,6 +415,7 @@ def main():
     # */
 
     # v1.25 */
+    # TODO: display these?
     palt_0 = (29.921 - cal['OffBP']) / cal['GainBP']
     alt_0 = pressure_alt(flight.BasePre, palt_0, cal)
 
