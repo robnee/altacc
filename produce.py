@@ -106,7 +106,7 @@ xducer_info = {
 # AltAcc init/config file ( be careful with spelling! )
 
 nit_info = {
-    "port": "where do you plug in the AltAcc ( oride: -p COM#",
+    "port": "where do you plug in the AltAcc ( oride: -p COM# )",
     "time": "time units preference ( not implemented yet )",
     "alt": "altitude preference",
     "vel": "velocity preference",
@@ -297,7 +297,6 @@ def pressure_alt(press, press_0, cal):
 def main():
 
     parse_commandline()
-    print(args)
 
     # go read the .nit file -- (v2) -- Moved here so CalFile, et al are set
     nit = read_nitfile(args.nit)
@@ -312,7 +311,7 @@ def main():
         parser.print_help()
         sys.exit(1)
     flight = read_datafile(data_filename)
-    print(flight)
+    print({k: v for k, v in flight._asdict().items() if k != 'Data'})
 
     # TODO: Version 1.25 -- use the offset from the .cal file so actbp is on
     xducer_type = 'MPX4100'
@@ -339,9 +338,11 @@ def main():
     else:
         ver = "AltAcc II"
 
-    gain = DEFAULT_GAIN             # aka slope of curve */
+    slope = DEFAULT_GAIN            # aka slope of curve */
     if args.gain:
-        gain = float(args.gain)
+        slope = float(args.gain)
+    elif cal['Slope']:
+        slope = cal['Slope']
 
     onegee = 0.0                    # AltAcc output @ +1 */
     if args.zor:
@@ -349,8 +350,8 @@ def main():
     else:
         onegee = sum(flight.Window) / 4.0
            
-    zerogee = onegee - gain         # AltAcc output @ 0G */
-    neggee = zerogee - gain         # AltAcc output @ -1 */
+    zerogee = onegee - slope        # AltAcc output @ 0G */
+    neggee = zerogee - slope        # AltAcc output @ -1 */
     goffset = onegee                # experimental ...   */
 
     # pre = ( byte ) floor ( CaliData [ AvgBP ].Val ) ;
@@ -388,16 +389,17 @@ def main():
         print("%sAltAcc Data file:         %s" % (com, data_filename), file=fp)
         print("%sCalibration file:         %s" % (com, cal_filename), file=fp)
         print("%s" % com, file=fp)
-        print("%sAltAcc Gain Factor:    %11.4f GHarrys / G" % (com, gain), file=fp)
+        print("%sAltAcc Gain Factor:    %11.4f GHarrys / G" % (com, slope), file=fp)
         print("%sAltAcc Minus One Gee:  %11.4f GHarrys" % (com, neggee), file=fp)
         print("%sAltAcc Zero Gee:       %11.4f GHarrys" % (com, zerogee), file=fp)
         print("%sAltAcc Plus One Gee:   %11.4f GHarrys" % (com, onegee), file=fp)
         print("%sLaunch Site Pressure:  %6d      Orvilles" % (com, flight.BasePre), file=fp, end='')
-
         if cal['OffBP'] != 0.00:
             print("   ( %.2f in Hg )" % (flight.BasePre * cal['GainBP'] + cal['OffBP']), file=fp)
         else:
             print(file=fp)
+        print("%sDrogue Fire Pressure:  %6d      Orvilles" % (com, flight.DroguePre), file=fp)
+        print("%sMain Fire Pressure:    %6d      Orvilles" % (com, flight.MainPre), file=fp)
 
         print("%sLaunch Site Altitude:  %6.0f      %s MSL" % (com, alt_0, UNITS[U['alt']]), file=fp)
 
@@ -412,7 +414,7 @@ def main():
                   (com, drogue_time, UNITS[U['time']], drogue_alt, UNITS[U['alt']]), file=fp)
 
         main_alt = pressure_alt(flight.MainPre, flight.BasePre, cal)
-        print("%sMain Fired at Time:    %11.4f %s      ( %6.0f %s AGL )" %
+        print("%sMain Fired at Time:    %11.4f %s        ( %6.0f %s AGL )" %
               (com, main_time, UNITS[U['time']], main_alt, UNITS[U['alt']]), file=fp)
 
         print("%s" % com, file=fp)
@@ -420,13 +422,9 @@ def main():
 
     if args.out:
         outf = open(args.out, 'w')
-
         if args.fmt == 'A':
             report1(outf, "# ")
-            print(Header, file=outf)
-        else:
-            print(ExHead, file=outf)
-
+            
     if not args.quiet:
         report1(sys.stdout)
 
@@ -450,9 +448,9 @@ def main():
         win_ptr = (win_ptr + 1) % 4
         gee.append(flight.Window[win_ptr])
 
-    oacc = 0.0                     # last accel reading for Trapeziod () */
-    vel  = 0.0                     # Sum of Accel == Velocity == vel */
-    multiplier = dT * GEE / gain / 2.0  # replace slow Trap () w/ inline */
+    oacc = 0.0                           # last accel reading for Trapeziod ()
+    vel  = 0.0                           # Sum of Accel == Velocity == vel
+    multiplier = dT * GEE / slope / 2.0  # replace slow Trap () w/ inline
 
     # oldest, older, old, cur acceleration go in next
     for i in range(4):
@@ -501,8 +499,6 @@ def main():
 
     maxialt = 0.0                   # max inertial alt   */
     tmaxialt = 0.0                  # time of max i-alt  */
-    maxpalt = 0.0                   # press alt at minvel*/
-
     maxvel = 0.0
     tmaxvel = 0.0
     minacc = 0.0
@@ -524,7 +520,7 @@ def main():
             alt += dalt
 
             acc = taylor(i, vee, 12 * dT)           # accel == dv/dt
-            gsum += gee[i] - goffset
+            gsum += gee[i] - goffset                # goffset = onegee
             oalt = dalt
 
             if not launch and gsum > LAUNCH_THOLD:
@@ -562,25 +558,38 @@ def main():
             if not args.all and pre[i] >= flight.BasePre and not end_of_time:
                 end_of_time = t + 5.0  # Add 5 seconds
 
-    if args.out:
+    def report2(fp):
+        if args.fmt == 'A':
+            print(Header, file=fp)
+        else:
+            print(ExHead, file=fp)
+
+        maxt = 10
         for i, t in enumerate(tee):
+            if t > maxt:
+                break
+                
             palt = pressure_alt(pre[i], flight.BasePre, cal) or 0.0
 
             if args.fmt == 'A':
                 print(" %9.4f    %3d    %3d  %5.0f  %9.2f  %9.2f  %9.2f  %8.0f" %
-                      (t, gee[i], pre[i], gsum, acc, vee[i], alt, palt), file=outf)
+                      (t, gee[i], pre[i], gsum, acc, vee[i], alt, palt), file=fp)
             else:
                 print("%.4f,%d,%d,%.0f,",
-                      (t, gee[i], pre[i], gsum), end='', file=outf)
+                      (t, gee[i], pre[i], gsum), end='', file=fp)
                 if t <= atime:
-                    print("%.2f,%.2f,%.2f,%.0f" % (acc, vee[i], alt, palt), file=outf)
+                    print("%.2f,%.2f,%.2f,%.0f" % (acc, vee[i], alt, palt), file=FO)
                 else:
-                    print(",,,%.0f", end='', file=outf)
+                    print(",,,%.0f", end='', file=fp)
 
+    if args.out:
+        report2(outf)
+    report2(sys.stdout)
+    
     maxpalt = pressure_alt(maxp, flight.BasePre, cal)
     msl_alt = pressure_alt(maxp, palt_0, cal) - alt_0
 
-    def report2(fp, com='# '):
+    def report3(fp, com='# '):
         print("%s" % com, file=fp)
         if not args.nomsl:
             print("%sMSL Pressure Altitude:    %6.0f    %s         ( %9.5f sec )" %
@@ -598,10 +607,10 @@ def main():
 
     if args.out:
         if args.fmt == 'A':
-            report2(outf)
+            report3(outf)
         outf.close()
 
-    report2(sys.stdout, com='')
+    report3(sys.stdout, com='')
 
 
 main()
