@@ -137,16 +137,12 @@ cal_info = {
     "XDucer": ("xducer", "Motorola Pressure XDucer Type"),
 }
 
-ComOride = False
-
 NIT_NAME = "prodata.nit"
 CAL_NAME = "prodata.cal"
 OUT_NAME = "prodata.dat"
 
-CalOride = False  # When the -c is invoked (v2)
-
-PALT_IDEAL_5100 = 210            # what _my_ test unit sez
-
+PALT_IDEAL_5100 = 210    # what _my_ test unit sez
+LAUNCH_THOLD = 16.0      # about 1/4 sec of 1.33 G
 TICK_CHAR = '.'
 COMMENT_CHAR = '#'
 DROGUE_TO_MAIN = 1
@@ -155,13 +151,6 @@ DEFAULT_GAIN = 2.5500    # +/- 50 G over 255 units
 GEE = 32.17              # you know, Newton and all
 dT = 0.0625              # AltAcc dt 1/16sec
 TWO_dT = 0.1250          # 2 * dT for 2-step derivs
-TWELVE_dT = 0.7500       # 12 * dT for Taylors 2step
-dT_3 = 0.02083333333333  # dT / 3 for Simpson
-
-TIME_END = 5.000         # end report @ down+5 (v2)
-TIME_MAX = 255.125       # end report @ down+5 (v2)
-
-LAUNCH_THOLD = 16.0      # about 1/4 sec of 1.33 G
 
 
 def parse_commandline():
@@ -307,27 +296,6 @@ def pressure_alt(press, press_0, cal):
 
 def main():
 
-    dalt = 0.0                      # differential alt   */
-
-    flight_time = [0.0, 0.0]        # firing times */
-
-    maxialt = 0.0                   # max inertial alt   */
-    tmaxialt = 0.0                  # time of max i-alt  */
-    maxpalt = 0.0                   # press alt at minvel*/
-
-    maxvel = 0.0
-    tmaxvel = 0.0
-    minacc = 0.0
-    tminacc = -1.0                  # tminacc controls derivative mode
-    maxacc = 0.0
-    tmaxacc = 0.0
-
-    end_of_time = TIME_MAX          # All the data (v2)  */
-    end_t_oride = False             # or not ... (v2)    */
-
-    launch = 0                      # set when gsum>thold*/
-    atime_oride = 0                 # set when gsum = 0  */
-
     parse_commandline()
     print(args)
 
@@ -347,12 +315,12 @@ def main():
     print(flight)
 
     # TODO: Version 1.25 -- use the offset from the .cal file so actbp is on
-    XDucerType = 'MPX4100'
+    xducer_type = 'MPX4100'
     if 'xDucer' in cal:
         if cal['XDucer'] == '5100':
-            XDucerType = 'MPX5100'
+            xducer_type = 'MPX5100'
         elif cal['XDucer'] == '4100':
-            XDucerType = 'MPX4100'
+            xducer_type = 'MPX4100'
 
     if 'Slope' not in cal or cal['Slope'] == 0.0:
         logging.error(f"Calibration file {args.cal} did not have Slope value!")
@@ -360,8 +328,8 @@ def main():
     # Version 1.25b -- moved from Calibrate ()
     if cal['OffBP'] == 0.00:
         logging.info(f"Calibration file {args.cal} did not have OffBP value!")
-        cal['GainBP'] = xducer_info[XDucerType].gain
-        logging.info(f"assuming GainBP = {cal['GainBP']} based on {XDucerType}")
+        cal['GainBP'] = xducer_info[xducer_type].gain
+        logging.info(f"assuming GainBP = {cal['GainBP']} based on {xducer_type}")
 
         cal['OffBp'] = cal['ActBP'] - cal['GainBP'] * cal['AvgBP']
         logging.info(f"assuming OffBP = {cal['OffBP']} based on ActBP: {cal['ActBP']}")
@@ -398,35 +366,24 @@ def main():
     palt_0 = (29.921 - cal['OffBP']) / cal['GainBP']
     # launch site alt
     alt_0 = pressure_alt(flight.BasePre, palt_0, cal)
-    atime = 0.0                     # apogee time IAlt */
-    
+
     flight_mode = flight.BSFlags & 0x01
 
-    flight_time[0] = flight.MainSec + (flight.Main16s & 0xE0) * 8.0 + (flight.Main16s & 0x0F) / 16.0
+    def convert_time(sec, sec_16):
+        return sec + (sec_16 & 0xE0) * 8.0 + (sec_16 & 0x0F) / 16.0
+
+    main_time = convert_time(flight.MainSec, flight.Main16s)
     if flight_mode == DROGUE_TO_MAIN:
-        flight_time[1] = flight.DrogueSec + (flight.Drogue16s & 0xE0) * 8.0 + (flight.Drogue16s & 0x0F) / 16.0
-
-    # if ( ftime [1] > 255.9375 )
-    # {
-    #   fmode = 2 ;
-    #   ftime [1] = -1 ;
-    #   atime = ftime [0] ;
-    #   maxp  = AltAccFile.Name.MainPre ;
-    # }
-
-        atime = flight_time[1]
-        maxp = flight.DroguePre
+        drouge_time = convert_time(flight.DrogueSec, flight.Drogue16s)
+        ptime = drouge_time
     else:
-        flight_time[1] = -1.0
-        atime = flight_time[0]
-        maxp = flight.MainPre
-    
-    ptime = atime                   # apogee time PAlt */
+        drogue_time = -1.0
+        ptime = main_time
 
     def report1(fp, com=''):
         print("%s" % com, file=fp)
         print("%sAltAcc Firmware:          %s" % (com, ver), file=fp)
-        print("%sXDucer Type:              %s" % (com, xducer_info[XDucerType].desc), file=fp)
+        print("%sXDucer Type:              %s" % (com, xducer_info[xducer_type].desc), file=fp)
         print("%sFlight Mode:              %s" % (com, flight_modes[flight_mode]), file=fp)
         print("%sAltAcc Data file:         %s" % (com, data_filename), file=fp)
         print("%sCalibration file:         %s" % (com, cal_filename), file=fp)
@@ -452,11 +409,11 @@ def main():
         if flight_mode == DROGUE_TO_MAIN:
             drogue_alt = pressure_alt(flight.DroguePre, flight.BasePre, cal)
             print("%sDrogue Fired at Time:  %11.4f %s      ( %6.0f %s AGL )" %
-                  (com, flight_time[1], UNITS[U['time']], drogue_alt, UNITS[U['alt']]), file=fp)
+                  (com, drogue_time, UNITS[U['time']], drogue_alt, UNITS[U['alt']]), file=fp)
 
         main_alt = pressure_alt(flight.MainPre, flight.BasePre, cal)
         print("%sMain Fired at Time:    %11.4f %s      ( %6.0f %s AGL )" %
-              (com, flight_time[0], UNITS[U['time']], main_alt, UNITS[U['alt']]), file=fp)
+              (com, main_time, UNITS[U['time']], main_alt, UNITS[U['alt']]), file=fp)
 
         print("%s" % com, file=fp)
         print("%s" % com, file=fp)
@@ -481,7 +438,6 @@ def main():
 
     # Fill the time, velocity array ... pad 2 then do Countdown data
 
-    t = -4.0 * dT
     tee, vee, gee, pre = [], [], [], []
 
     win_ptr = flight.WinPtr
@@ -517,7 +473,7 @@ def main():
         vel += (oacc + cacc) * multiplier
 
         # 0.25 sec are lost when firing pyros
-        if t in flight_time:
+        if t in (main_time, drogue_time):
             t += dT * 4
         else:
             t += dT
@@ -537,81 +493,74 @@ def main():
     gee.extend((0.0, 0.0))
     pre.extend((0.0, 0.0))
 
-    acc = 0.0  # accel == dv/dt
-    alt = 0.0  # another temp
-    oalt = 0.0  # Simpson() does 2dT */
-    gsum = 0  # Gee - onegee temp  */
+    oalt = 0.0  # Simpson() does 2dT
+    gsum = 0  # Gee - onegee temp
+    launch = False  # set when gsum>thold
+    end_of_time = None  # All the data (v2)
+    maxp = flight.DroguePre if flight_mode == DROGUE_TO_MAIN else flight.MainPre
 
-    """
-     if (( pre == 254 ) || ( t > end_of_time ))
-        break ;
-    
-     if ( j > 3 )
-     {
-        dalt = Simpson ( i, vee, dT_3 ) - oalt ;
-        alt += dalt ;
-        acc  = Taylor  ( i, vee, TWELVE_dT ) ;
-        gsum += ( gee - goffset ) ;
-        oalt = dalt ;
-    
-        if (( launch == 0 ) && ( gsum > LAUNCH_THOLD ))            /* v 1.25 */
-           launch = 1 ;
-    
-        if ( launch  && ( gsum <= 0.0 ) && ( atime_oride == 0 ))   /* v 1.25 */
-        {
-           atime = t ;
-           atime_oride = 1 ;
-        }
-     }
-    
-     
-     if ( t <= atime )
-     {
-        /* v 1.25 */
-    
-        if ( pre <= maxp )
-        {
-           maxp = pre ;
-           ptime = t ;
-        }
-        if ( alt > maxialt )
-        {
-           maxialt = alt ;
-           tmaxialt = t ;
-        }
-        if ( vee [i] > maxvel )
-        {
-           maxvel = vee [i] ;
-           tmaxvel = t ;
-        }
-    
-     /* if ( t < atime ) */
-        if ( gsum >= 0.0 )                                         /* v 1.25 */
-        {
-           if ( acc < minacc )
-           {
-           minacc = acc ;
-           tminacc = t ;
-           }
-           if ( acc > maxacc )
-           {
-              maxacc = acc ;
-              tmaxacc = t ;
-           }
-        }
-     }
-     else
-     {
-        /* (v2) -- Break early if we get back to the ground */
-    
-        if (( end_t_oride == FALSE ) &&
-            ( pre >= AltAccFile.Name.BasePre ) &&
-            ( end_of_time == TIME_MAX ))
-        {
-           end_of_time = t + TIME_END ;
-        }
-     }
-    """
+    maxialt = 0.0                   # max inertial alt   */
+    tmaxialt = 0.0                  # time of max i-alt  */
+    maxpalt = 0.0                   # press alt at minvel*/
+
+    maxvel = 0.0
+    tmaxvel = 0.0
+    minacc = 0.0
+    tminacc = -1.0                  # tminacc controls derivative mode
+    maxacc = 0.0
+    tmaxacc = 0.0
+
+    atime = ptime
+    atime_oride = False             # set when gsum = 0
+    acc = 0.0
+    alt = 0.0
+
+    for i, t in enumerate(tee):
+        if pre[i] == 254 or (end_of_time and t > end_of_time):
+            break
+
+        if i > 3:
+            dalt = simpson(i, vee, dT / 3) - oalt    # differential alt
+            alt += dalt
+
+            acc = taylor(i, vee, 12 * dT)           # accel == dv/dt
+            gsum += gee[i] - goffset
+            oalt = dalt
+
+            if not launch and gsum > LAUNCH_THOLD:
+                launch = True
+
+            # TODO: setting atime here clobbers the value derived from the header
+            if launch and gsum <= 0.0 and not atime_oride:
+                atime = t
+                atime_oride = True
+
+        if t <= atime:
+            # TODO: setting maxp here clobbers the value derived from the header
+            if pre[i] <= maxp:
+                maxp = pre[i]
+                ptime = t
+
+            if alt > maxialt:
+                maxialt = alt
+                tmaxialt = t
+
+            if vee[i] > maxvel:
+                maxvel = vee[i]
+                tmaxvel = t
+
+            if gsum >= 0.0:
+                if acc < minacc:
+                    minacc = acc
+                    tminacc = t
+
+                if acc > maxacc:
+                    maxacc = acc
+                    tmaxacc = t
+        else:
+            # (v2) -- Break early if we get back to the ground
+            if not args.all and pre[i] >= flight.BasePre and not end_of_time:
+                end_of_time = t + 5.0  # Add 5 seconds
 
     if args.out:
         for i, t in enumerate(tee):
@@ -628,11 +577,11 @@ def main():
                 else:
                     print(",,,%.0f", end='', file=outf)
 
-
     maxpalt = pressure_alt(maxp, flight.BasePre, cal)
     msl_alt = pressure_alt(maxp, palt_0, cal) - alt_0
 
     def report2(fp, com='# '):
+        print("%s" % com, file=fp)
         if not args.nomsl:
             print("%sMSL Pressure Altitude:    %6.0f    %s         ( %9.5f sec )" %
                   (com, msl_alt, UNITS[U['alt']], ptime), file=fp)
@@ -650,7 +599,7 @@ def main():
     if args.out:
         if args.fmt == 'A':
             report2(outf)
-        close(outf)
+        outf.close()
 
     report2(sys.stdout, com='')
 

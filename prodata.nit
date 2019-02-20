@@ -7,5 +7,5 @@ alt            ft       # altitude preference
 vel            ft/sec   # velocity preference
 acc            ft/sec^2 # acceleration preference
 press          inhg     # pressure units preference
-cal            ./prodata.nit
+cal            ./prodata.cal
 xducer         4100
