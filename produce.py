@@ -63,29 +63,33 @@ flight_modes = (
     "Drogue to Main Mode -- !! No Drogue Fire !!"
 )
 
-UNITS = [
-    "sec",
-    "in",
-    "ft",
-    "cm",
-    "m",
-    "km",
-    "oz",
-    "lb",
-    "gm",
-    "kg",
-    "inhg",
-    "mmhg",
-    "torr",
-    "kpa",
-]
+UNITS = {
+    "sec", ('press', 1.0),
+    "in", ('alt', 1.0),
+    "ft", ('alt', 1.0),
+    "cm", ('alt', 1.0),
+    "m", ('alt', 1.0),
+    "km", ('alt', 1.0),
+    "oz", ('acc', 1.0),
+    "lb", ('acc', 1.0),
+    "gm", ('acc', 1.0),
+    "kg", ('acc', 1.0),
+    "GHarrys", ('acc', 1.0),
+    "inhg", ('press', 1.0),
+    "mmhg", ('press', 1.0),
+    "torr", ('press', 1.0),
+    "kpa", ('press', 1.0),
+    "Orvilles", ('press', 1.0),
+    "ft/sec", ('vel', 1.0),
+}
 
 # default units
 U = {
-    "alt": 2,
-    "mass": 7,
-    "time": 0,
-    "pressure": 10
+    "alt": "ft",
+    "acc": "lb",
+    "vel": "ft/sec",
+    "time": "sec",
+    "pressure": "inhg",
 }
 
 # PALT_GAIN_4100 = 0.1113501786   # this is the 4100 xducer
@@ -137,6 +141,30 @@ cal_info = {
     "XDucer": ("xducer", "Motorola Pressure XDucer Type"),
 }
 
+data_info = {
+    "Version": "Starting at v2-125, we have V!",
+    "DrogueSec": "Time of Drogue Deploy, Seconds",
+    "Drogue16s": "Time of Drogue Deploy, 1/16sec",
+    "DrogueAcc": "Accel at Drogue Deploy",
+    "DroguePre": "Pressure at Drogue Deploy",
+    "MainSec": "Time of Main Deploy, Seconds",
+    "Main16s": "Time of Main Deploy, 1/16sec",
+    "MainAcc": "Accel at Main Deploy",
+    "MainPre": "Pressure at Main Deploy",
+    "BSFlags": "AltAcc Launch Status Flags",
+    "BasePre": "Pressure Reading, Win [Ptr]",
+    "LastPre": "Pressure Reading, Win [Ptr+3]",
+    "WinPtr": "Pointer to Beginning of Win []",
+    "Window": "4-byte circular buffer, Accel",
+    "AvgAcc": "Average of Window [] Data",
+    "NitAcc": "T={1,2,3,4} / 16 (Liftoff Acc)",
+    "SumLob": "Lo Byte of Sum of NitAcc []",
+    "SumHib": "Hi Byte of Sum of NitAcc []",
+    "Data": "This is the 8160 Byte Flight",
+    "CkSum": "AltAcc's Version of check sum",
+    "OK": "AltAcc sez 'OK'",
+}
+    
 NIT_NAME = "prodata.nit"
 CAL_NAME = "prodata.cal"
 OUT_NAME = "prodata.dat"
@@ -162,7 +190,7 @@ def parse_commandline():
     parser.add_argument('-f', '--data', help='AltAcc data (proread) filename')
     parser.add_argument('-o', '--out', help='output results filename')
 
-    parser.add_argument('-z', '--zor', action='store', help='one gee override value (overrides data file one gee)')
+    parser.add_argument('-z', '--oneg', action='store', help='one gee override value (overrides data file one gee)')
     parser.add_argument('-g', '--gain', action='store', help='gain override (overrides cal file gain value)')
     parser.add_argument('-F', '--fmt', action='store', default='A', help='output file format (C)SV (A)SCII')
     parser.add_argument('-m', '--nomsl', action='store_true', help='do not show MSL pressure alt along with AGL')
@@ -175,10 +203,7 @@ def parse_commandline():
 
 
 altacc_format = struct.Struct("<B3x4B4BBBBB4sB4sBB5x8160sH2s")
-AltAccDump = namedtuple('AltAccDump',
-                        "Version DrogueSec Drogue16s DrogueAcc DroguePre "
-                        "MainSec Main16s MainAcc MainPre BSFlags BasePre "
-                        "LastPre WinPtr Window AvgAcc NitAcc SumLob SumHib Data CkSum OK")
+AltAccDump = namedtuple('AltAccDump', ' '.join(data_info.keys()))
 
 
 def read_datafile(path: str):
@@ -250,6 +275,28 @@ def read_calfile(path: str):
     return cal
 
 
+def dump_calfile(data):
+    for k, v in data.items():
+        if k != 'Data':
+            print(f'{cal_info[k][0]:8}  {v:8}  # {cal_info[k][1]}')
+            
+
+def dump_datafile(data):
+    for k, v in data._asdict().items():
+        if k == 'Data':
+            pass
+        elif k in ('Window', 'NitAcc'):
+            vec = ''.join('%02X ' % x for x in v)
+            print(f'{k:10}: {vec:12}  {data_info[k]}')
+        elif k in ('OK'):
+            print(f'{k:10}: {v.decode():12}  {data_info[k]}')
+        elif k in ('BSFlags'):
+            b = '{:08b}'.format(v)
+            print(f"{k:10}: {b:12}  {data_info[k]}")
+        else: 
+            print(f'{k:10}: {v:12}  {data_info[k]}')
+        
+        
 def trapeziod(ptr, data, dt):
     """I tried Simpson's rule but the noise in the accelerometer output made
     the output less accurate than a simple trapezoid integral.  This also
@@ -304,14 +351,16 @@ def main():
 
     cal_filename = args.cal or nit['cal'] or CAL_NAME
     cal = read_calfile(cal_filename)
-    print(cal)
+    print()
+    dump_calfile(cal)
 
     data_filename = args.datafile or args.data
     if not data_filename:
         parser.print_help()
         sys.exit(1)
     flight = read_datafile(data_filename)
-    print({k: v for k, v in flight._asdict().items() if k != 'Data'})
+    print()
+    dump_datafile(flight)
 
     # TODO: Version 1.25 -- use the offset from the .cal file so actbp is on
     xducer_type = 'MPX4100'
@@ -345,8 +394,8 @@ def main():
         slope = cal['Slope']
 
     onegee = 0.0                    # AltAcc output @ +1 */
-    if args.zor:
-        onegee = float(args.zor)
+    if args.oneg:
+        onegee = float(args.oneg)
     else:
         onegee = sum(flight.Window) / 4.0
            
@@ -389,7 +438,7 @@ def main():
         print("%sAltAcc Data file:         %s" % (com, data_filename), file=fp)
         print("%sCalibration file:         %s" % (com, cal_filename), file=fp)
         print("%s" % com, file=fp)
-        print("%sAltAcc Gain Factor:    %11.4f GHarrys / G" % (com, slope), file=fp)
+        print("%sAltAcc Gain Factor:    %11.4f GHarrys/G" % (com, slope), file=fp)
         print("%sAltAcc Minus One Gee:  %11.4f GHarrys" % (com, neggee), file=fp)
         print("%sAltAcc Zero Gee:       %11.4f GHarrys" % (com, zerogee), file=fp)
         print("%sAltAcc Plus One Gee:   %11.4f GHarrys" % (com, onegee), file=fp)
@@ -401,9 +450,11 @@ def main():
         print("%sDrogue Fire Pressure:  %6d      Orvilles" % (com, flight.DroguePre), file=fp)
         print("%sMain Fire Pressure:    %6d      Orvilles" % (com, flight.MainPre), file=fp)
 
-        print("%sLaunch Site Altitude:  %6.0f      %s MSL" % (com, alt_0, UNITS[U['alt']]), file=fp)
+        print("%sLaunch Site Altitude:  %6.0f      %s MSL" % (com, alt_0, U['alt']), file=fp)
 
-        # v1.25
+        if cal['ActAlt'] >= 0.0:
+            print("%sActual Altitude:       %6.0f      %s MSL     ( Cal: ActAlt )" % (com, cal['ActAlt'], U['alt']), file=fp)
+            
         # alt_0 + CaliData [ ActAlt ].Val, Units [ U[0]] ) ;
 
         print("%s" % com, file=fp)
@@ -411,11 +462,11 @@ def main():
         if flight_mode == DROGUE_TO_MAIN:
             drogue_alt = pressure_alt(flight.DroguePre, flight.BasePre, cal)
             print("%sDrogue Fired at Time:  %11.4f %s      ( %6.0f %s AGL )" %
-                  (com, drogue_time, UNITS[U['time']], drogue_alt, UNITS[U['alt']]), file=fp)
+                  (com, drogue_time, U['time'], drogue_alt, U['alt']), file=fp)
 
         main_alt = pressure_alt(flight.MainPre, flight.BasePre, cal)
         print("%sMain Fired at Time:    %11.4f %s        ( %6.0f %s AGL )" %
-              (com, main_time, UNITS[U['time']], main_alt, UNITS[U['alt']]), file=fp)
+              (com, main_time, U['time'], main_alt, U['alt']), file=fp)
 
         print("%s" % com, file=fp)
         print("%s" % com, file=fp)
@@ -438,14 +489,17 @@ def main():
 
     tee, vee, gee, pre = [], [], [], []
 
-    win_ptr = flight.WinPtr
+    tee.extend((-5 * dT, -4 * dT))
+    vee.extend((0.0, 0.0))
+    gee.extend((flight.Window[flight.WinPtr + 1], flight.Window[flight.WinPtr + 1]))
+    pre.extend((flight.BasePre, flight.BasePre))
 
-    for i in range(6):
-        tee.append((i - 5) * dT)
+    for i in range(4):
+        tee.append((i - 3) * dT)
         vee.append(0.0)
         pre.append(flight.BasePre)
 
-        win_ptr = (win_ptr + 1) % 4
+        win_ptr = (flight.WinPtr + i + 1) % 4
         gee.append(flight.Window[win_ptr])
 
     oacc = 0.0                           # last accel reading for Trapeziod ()
@@ -492,7 +546,6 @@ def main():
     pre.extend((0.0, 0.0))
 
     oalt = 0.0  # Simpson() does 2dT
-    gsum = 0  # Gee - onegee temp
     launch = False  # set when gsum>thold
     end_of_time = None  # All the data (v2)
     maxp = flight.DroguePre if flight_mode == DROGUE_TO_MAIN else flight.MainPre
@@ -508,28 +561,31 @@ def main():
 
     atime = ptime
     atime_oride = False             # set when gsum = 0
-    acc = 0.0
-    alt = 0.0
+    acc, alt, gsum = [], [], []
 
     for i, t in enumerate(tee):
         if pre[i] == 254 or (end_of_time and t > end_of_time):
             break
 
-        if i > 3:
+        if i > 5:
             dalt = simpson(i, vee, dT / 3) - oalt    # differential alt
-            alt += dalt
-
-            acc = taylor(i, vee, 12 * dT)           # accel == dv/dt
-            gsum += gee[i] - goffset                # goffset = onegee
+            alt.append(alt[i - 1] + dalt)
             oalt = dalt
 
-            if not launch and gsum > LAUNCH_THOLD:
+            acc.append(taylor(i, vee, 12 * dT))     # accel == dv/dt
+            gsum.append(gsum[i - 1] + gee[i] - goffset)    # goffset = onegee
+
+            if not launch and gsum[i] > LAUNCH_THOLD:
                 launch = True
 
             # TODO: setting atime here clobbers the value derived from the header
-            if launch and gsum <= 0.0 and not atime_oride:
+            if launch and gsum[i] <= 0.0 and not atime_oride:
                 atime = t
                 atime_oride = True
+        else:
+            acc.append(0.0)
+            alt.append(0.0)
+            gsum.append(0.0)
 
         if t <= atime:
             # TODO: setting maxp here clobbers the value derived from the header
@@ -537,21 +593,21 @@ def main():
                 maxp = pre[i]
                 ptime = t
 
-            if alt > maxialt:
-                maxialt = alt
+            if alt[i] > maxialt:
+                maxialt = alt[i]
                 tmaxialt = t
 
             if vee[i] > maxvel:
                 maxvel = vee[i]
                 tmaxvel = t
 
-            if gsum >= 0.0:
-                if acc < minacc:
-                    minacc = acc
+            if gsum[i] >= 0.0:
+                if acc[i] < minacc:
+                    minacc = acc[i]
                     tminacc = t
 
-                if acc > maxacc:
-                    maxacc = acc
+                if acc[i] > maxacc:
+                    maxacc = acc[i]
                     tmaxacc = t
         else:
             # (v2) -- Break early if we get back to the ground
@@ -564,7 +620,7 @@ def main():
         else:
             print(ExHead, file=fp)
 
-        maxt = 10
+        maxt = 2
         for i, t in enumerate(tee):
             if t > maxt:
                 break
@@ -573,12 +629,12 @@ def main():
 
             if args.fmt == 'A':
                 print(" %9.4f    %3d    %3d  %5.0f  %9.2f  %9.2f  %9.2f  %8.0f" %
-                      (t, gee[i], pre[i], gsum, acc, vee[i], alt, palt), file=fp)
+                      (t, gee[i], pre[i], gsum[i], acc[i], vee[i], alt[i], palt), file=fp)
             else:
                 print("%.4f,%d,%d,%.0f,",
-                      (t, gee[i], pre[i], gsum), end='', file=fp)
+                      (t, gee[i], pre[i], gsum[i]), end='', file=fp)
                 if t <= atime:
-                    print("%.2f,%.2f,%.2f,%.0f" % (acc, vee[i], alt, palt), file=FO)
+                    print("%.2f,%.2f,%.2f,%.0f" % (acc[i], vee[i], alt[i], palt), file=fp)
                 else:
                     print(",,,%.0f", end='', file=fp)
 
@@ -593,17 +649,17 @@ def main():
         print("%s" % com, file=fp)
         if not args.nomsl:
             print("%sMSL Pressure Altitude:    %6.0f    %s         ( %9.5f sec )" %
-                  (com, msl_alt, UNITS[U['alt']], ptime), file=fp)
+                  (com, msl_alt, U['alt'], ptime), file=fp)
         print("%sAGL Pressure Altitude:    %6.0f    %s         ( %9.5f sec )" %
-              (com, maxpalt, UNITS[U['alt']], ptime), file=fp)
+              (com, maxpalt, U['alt'], ptime), file=fp)
         print("%sMax Inertial Altitude:    %6.0f    %s         ( %9.5f sec )" %
-              (com, maxialt, UNITS[U['alt']], tmaxialt), file=fp)
+              (com, maxialt, U['alt'], tmaxialt), file=fp)
         print("%sMaximum Velocity:         %8.1f  %s / %s   ( %9.5f sec )" %
-              (com, maxvel, UNITS[U['alt']], UNITS[U['time']], tmaxvel), file=fp)
+              (com, maxvel, U['alt'], U['time'], tmaxvel), file=fp)
         print("%sMaximum Acceleration:     %9.2f %s / %s^2 ( %9.5f sec, %5.1f G's )" %
-              (com, maxacc, UNITS[U['alt']], UNITS[U['time']], tmaxacc, maxacc/GEE), file=fp)
+              (com, maxacc, U['alt'], U['time'], tmaxacc, maxacc/GEE), file=fp)
         print("%sMinimum Acceleration:     %9.2f %s / %s^2 ( %9.5f sec, %5.1f G's )" %
-              (com, minacc, UNITS[U['alt']], UNITS[U['time']], tminacc, minacc/GEE), file=fp)
+              (com, minacc, U['alt'], U['time'], tminacc, minacc/GEE), file=fp)
 
     if args.out:
         if args.fmt == 'A':
