@@ -4,29 +4,17 @@ This program is to calibrate the BSR AltAcc and save results to a file
 """
 
 import math
-import serial
 import argparse
-import datetime
 import logging
 from prodata import *
 
 VERSION = "1.25c"
-
 PORT = "/dev/ttyUSB0"
 BAUD = 9600
-EchoIsOff = 0  # for error recovery */
-Verbose = True
-
-ALTACC_LINE_MAX = 8
-ALTACC_TALK_MAX = 256
-ALTACC_BUFF_MAX = ALTACC_LINE_MAX * ALTACC_TALK_MAX + 2
-
-N = []
-Sum = []
-SumSquares = []
-
 TICK_CHAR = '.'
-ALTACC_DUMP_LEN = 8196
+
+Data = namedtuple('Data', "n, sum_ squares")
+Samples = namedtuple('Samples', "acc pre")
 
 
 def parse_commandline():
@@ -39,12 +27,25 @@ def parse_commandline():
 
     parser.add_argument('-q', '--quiet', action='store_true', help="be quiet about it")
     parser.add_argument('--version', action='version', version=f'v{VERSION}')
-    parser.add_argument('calfile', default=None, nargs='?', action='store', help='calibration filename')
+    parser.add_argument('calfile', default=None, nargs='?', action='store', help='output calibration filename (same as --out)')
 
     args = parser.parse_args()
 
 
 def set_port(port):
+    if True:
+        class SerMock:
+            name = 'COM9'
+            
+            def write(self, data):
+                pass
+                
+            def read(self, count):
+                return b'125 236\n'
+
+        return SerMock() 
+
+    import serial
     com = serial.Serial(port=port, baudrate=BAUD)
     if not com:
         print(f"could not open {port}")
@@ -53,97 +54,30 @@ def set_port(port):
     return com
 
 
-"""
-u16 LoadAltAccAry ( Ary )
-/* ------------------------------------------------------------------------ */
-    AltAccTalk    * Ary ;
-/* ------------------------------------------------------------------------ */
-{
+def get_samples(com):
+    com.write(b'/T')
 
-#define  PARSE_MAX      3
+    samples = []
+    for i in range(256):
+        line = com.read(8)
+        if len(line) < 8:
+            break
 
-   u16            i = 0 ;                    /* Array Cursor */
-   u16            j = 0 ;                    /* Line Cursor  */
+        a, p = [int(x) for x in line.strip().split()]
+        
+        samples.append(Samples._make((a, p)))
+        
+        if i % 8 == 0:
+            print('.', end='')
+            sys.stdout.flush()
+    print()
 
-   int k = 0 ;
-
-   char * BuffPtr = AltAccBuff ;
-   char * TokPtr ;
-
-   u16            NumArg ;
-   char         * ParsePtr [ PARSE_MAX ] ;
-
-   char  TalkCmd [] = "/T" ;
-
-   write ( ComPort, TalkCmd, 2 ) ;
-   tcflush ( ComPort, TCIOFLUSH );
-
-   /* we are gonna load up a 256 * 8 + 2 char array here ... */
-
-   while ( i < ALTACC_BUFF_MAX )
-   {
-      j = read ( ComPort, BuffPtr, 8 ) ;          /* AAA PPP\n == 8 chars */
-
-      i += j ;
-      k += j ;
-      BuffPtr += j ;
-
-      if ( k >= 48 )
-      {
-         putc ( TICK_CHAR, stderr );
-         k = 0 ;
-      }
-   }
-
-   if ( i > 2048 )
-      i = 2048 ;
-
-   tcflush ( ComPort, TCIOFLUSH );
-
-   AltAccBuff [ i ] = '\0' ;
-   BuffPtr = AltAccBuff ;
-
-   i = 1 ;                     /* Number of good pairs in AltAccData[0].A */
-   j = 0 ;                     /* Number of bad  pairs in AltAccData[0].P */
-
-   TokPtr = strtok ( BuffPtr, "\n" ) ;    /* let the c-lib extract a line */
-
-   while (( TokPtr != NULL ) && ( i < 256 ))
-   {
-      NumArg = Parse ( TokPtr, PARSE_MAX, ParsePtr ) ;
-
-      if ( NumArg == 2 )
-      {
-         AltAccAry [i].A = (byte) atoi ( ParsePtr [0] );
-         AltAccAry [i].P = (byte) atoi ( ParsePtr [1] );
-      }
-      else
-         j ++ ;
-
-      TokPtr = strtok ( NULL, "\n" );
-
-      i ++ ;
-   }
-
-   AltAccAry [0].A = (byte) ( -- i ) ;
-   AltAccAry [0].P = (byte) j ;
-
-   fprintf ( stdout, "\n" ) ;
-
-   return ( i + 1 ) ;
-}
-"""
-
-
-def altacc_talk(com):
-    Samples = namedtuple('Samples', "acc pre")
-    return [Samples._make((125, 236))] * 256
+    return samples
 
 
 def get_data(com, what):
     while True:
-        # TODO read the data
-        data = altacc_talk(com)
+        data = get_samples(com)
 
         print(f"read {len(data)} lines from the AltAcc on {com.name}")
 
@@ -155,16 +89,15 @@ def get_data(com, what):
         if s not in ('n', 'N'):  # i.e.default answer == 'y'
             break
 
-    count = data[0].a  # Why?
+    count = len(data)
     sum_ = 0.0
     squares = 0.0
 
     for i in range(count):
-        dtemp = data[i][what]
+        dtemp = data[i].pre if what == 'pre' else data[i].acc
         sum_ += dtemp
         squares += dtemp * dtemp
 
-    Data = namedtuple('Data', "n, sum_ squares")
     return Data._make((count, sum_, squares))
 
 
@@ -211,7 +144,7 @@ def main():
     cal['AvgBP'] = pre.sum_ / pre.n
     cal['StDBP'] = math.sqrt((pre.squares - (pre.sum_ * pre.sum_ / pre.n)) / (pre.n - 1))
 
-    print("Set the AltAcc Upside Down to Measure -1 G")
+    print("\nSet the AltAcc Upside Down to Measure -1 G")
     input("then press enter when ready ( x to quit ) ")
     if s.strip() in ('x', 'X'):
         sys.exit(3)
@@ -222,7 +155,7 @@ def main():
     cal['AvgNegG'] = neg.sum_ / neg.n
     cal['StDNegG'] = math.sqrt((neg.squares - (neg.sum_ * neg.sum_ / neg.n)) / (neg.n - 1))
 
-    print("Set the AltAcc Flat to Measure Zero G")
+    print("\nSet the AltAcc Flat to Measure Zero G")
     input("then press enter when ready ( x to quit ) ")
     if s.strip() in ('x', 'X'):
         sys.exit(3)
@@ -235,13 +168,13 @@ def main():
 
     cal['FiDNegG'] = cal['AvgZeroG'] - cal['AvgNegG']
 
-    print("Stand the AltAcc Right side Up to Measure Plus One G")
+    print("\nSet the AltAcc Right side Up to Measure Plus One G")
     input("then press enter when ready ( x to quit ) ")
 
     # GetaLoadaData(0, 3);
     one = get_data(com, "acc")
 
-    cal['AvgOneoG'] = one.sum_ / one.n
+    cal['AvgOneG'] = one.sum_ / one.n
     cal['StDOneG'] = math.sqrt((one.squares - (one.sum_ * one.sum_ / one.n)) / (one.n - 1))
 
     cal['FiDZeroG'] = cal['AvgOneG'] - cal['AvgZeroG']
@@ -272,8 +205,8 @@ def main():
     std_y_x /= n - 2
 
     std_y = ((one.squares + zero.squares + neg.squares) - ((dtemp * dtemp) / n)) / (n - 1)
-
-    cal['CCoff'] = 1.0 - (std_y_x / std_y)
+    if std_y > 0:
+        cal['CCoff'] = 1.0 - (std_y_x / std_y)
 
     # Test for proper operation and a good unit
     if cal['FiDNegG'] <= 0.0 or cal['FiDZeroG'] <= 0.0:
@@ -281,12 +214,11 @@ def main():
         s = input("                or a defective unit.  Save data? ( y | n ) ")
         if s in ('y', 'Y'):
             sys.exit(3)
-
-    header = "#\n# AltAcc Calibration Data %s\n#\n" % (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    # dump_calfile(cal_filename, cal, header)
+ 
+    # dump_calfile(cal_filename, cal)
 
     if not args.quiet:
-        dump_calfile(None, cal, header)
+        dump_calfile(None, cal)
 
-
+sys.argv = ['probate.py', 'pb.cal']
 main()

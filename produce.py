@@ -1,12 +1,7 @@
-"""                                produce
+""" produce
 
 This Is a Python Program For Converting binary data from the BSR AltAcc
 to ASCII Data with nice little Headers.
-
-
-  Rev  Who  Date        Description
-=====  ===  ==========  ========================================
-1.25c  kjh  09-28-1998  Eliminated stderr output for DOS version
 """
 
 import sys
@@ -15,17 +10,6 @@ from math import log, exp
 from prodata import *
 
 VERSION = "1.25c"
-
-Header = (
-    "      Time  Accel  Press    Sum  Accelerat   Velocity   Altitude  PressAlt\n"
-    "       sec  units  units  units   ft/sec^2     ft/sec       feet      feet\n"
-    " =========  =====  =====  =====  =========  =========  =========  ========\n"
-)
-
-ExHead = (
-    '''"Time","Accel","Press","Vel","Accel","Velocity","IAlt","PAlt",'''
-    '''"sec","GHarrys","Orvilles","Verns","ft/sec^2","ft/sec","feet","feet"'''
-)
 
 flight_modes = (
     "Main Only Mode",
@@ -62,26 +46,12 @@ U = {
     "pressure": "inhg",
 }
 
-# PALT_GAIN_4100 = 0.1113501786   # this is the 4100 xducer
-# PALT_OFFSET_4100 = 3.418657     # these are average lines
-# PALT_GAIN_5100 = 0.1354567027   # this is the 5100 xducer
-# PALT_OFFSET_5100 = 1.475092     # this is 40 mV / KPa
-# PALT_GAIN_4100   0.1760937134  /* this is the 4100 xducer
-# PALT_OFFSET_4100 -12.341491    /* this is 52 mV / KPA !!!
-# PALT_GAIN_5100   0.1447552322  /* this is the 5100 xducer
-# PALT_OFFSET_5100 -0.478599     /* this is from test1
-
-# AltAcc init/config file ( be careful with spelling! )
-
-
 PALT_IDEAL_5100 = 210    # what _my_ test unit sez
 LAUNCH_THOLD = 16.0      # about 1/4 sec of 1.33 G
 DROGUE_TO_MAIN = 1
-NUM_PAIRS = 4080
 DEFAULT_GAIN = 2.5500    # +/- 50 G over 255 units
 GEE = 32.17              # you know, Newton and all
 dT = 0.0625              # AltAcc dt 1/16sec
-TWO_dT = 0.1250          # 2 * dT for 2-step derivs
 
 
 def parse_commandline():
@@ -298,11 +268,7 @@ def main():
 
     tee, vee, gee, pre = [], [], [], []
 
-    tee.extend((-5 * dT, -4 * dT))
-    vee.extend((0.0, 0.0))
-    gee.extend((flight.Window[flight.WinPtr + 1], flight.Window[flight.WinPtr + 1]))
-    pre.extend((flight.BasePre, flight.BasePre))
-
+    # 1/4 second before launch
     for i in range(4):
         tee.append((i - 3) * dT)
         vee.append(0.0)
@@ -329,15 +295,16 @@ def main():
 
     # Now do the flight data stored as alternating samples A P A P A P ...
     t = 4 * dT
-    for i in range(NUM_PAIRS):
+    for i in range(len(flight.Data) // 2):
         cacc = flight.Data[i * 2] - onegee
         vel += (oacc + cacc) * multiplier
 
-        # 0.25 sec are lost when firing pyros
+        # 0.25 sec lost when firing pyros
         if t in (main_time, drogue_time):
             t += dT * 4
         else:
             t += dT
+
         tee.append(t)
         vee.append(vel)
         gee.append(flight.Data[i * 2])
@@ -425,11 +392,19 @@ def main():
 
     def report2(fp):
         if args.fmt == 'A':
-            print(Header, file=fp)
+            print(
+            "      Time  Accel  Press    Sum  Accelerat   Velocity   Altitude  PressAlt\n"
+            "       sec  units  units  units   ft/sec^2     ft/sec       feet      feet\n"
+            " =========  =====  =====  =====  =========  =========  =========  ========\n",
+            file=fp)
         else:
-            print(ExHead, file=fp)
+            print(
+            '''"Time","Accel","Press","Vel","Accel","Velocity","IAlt","PAlt",'''
+            '''"sec","GHarrys","Orvilles","Verns","ft/sec^2","ft/sec","feet","feet"''',
+            file=fp)
 
-        maxt = 2
+        # TODO: check if the correct len is dumped and take out the hardcode
+        maxt = 10
         for i, t in enumerate(tee):
             if t > maxt:
                 break
@@ -466,9 +441,14 @@ def main():
         print("%sMaximum Velocity:         %8.1f  %s / %s   ( %9.5f sec )" %
               (com, maxvel, U['alt'], U['time'], tmaxvel), file=fp)
         print("%sMaximum Acceleration:     %9.2f %s / %s^2 ( %9.5f sec, %5.1f G's )" %
-              (com, maxacc, U['alt'], U['time'], tmaxacc, maxacc/GEE), file=fp)
+              (com, maxacc, U['alt'], U['time'], tmaxacc, maxacc / GEE), file=fp)
         print("%sMinimum Acceleration:     %9.2f %s / %s^2 ( %9.5f sec, %5.1f G's )" %
-              (com, minacc, U['alt'], U['time'], tminacc, minacc/GEE), file=fp)
+              (com, minacc, U['alt'], U['time'], tminacc, minacc / GEE), file=fp)
+        if flight_mode == DROGUE_TO_MAIN:
+            print("%sDrogue:                   %9.2f %s / %s^2 ( %9.5f sec )" %
+                  (com, 0, U['alt'], U['time'], drogue_time), file=fp)
+        print("%sMain:                     %9.2f %s / %s^2 ( %9.5f sec )" %
+              (com, 0, U['alt'], U['time'], main_time), file=fp)
 
     if args.out:
         if args.fmt == 'A':

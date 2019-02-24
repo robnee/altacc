@@ -33,6 +33,7 @@ byte  K ;                        /* AltAcc sez 'K'                 */
 import sys
 import struct
 import logging
+import datetime
 from collections import namedtuple
 
 NIT_NAME = "prodata.nit"
@@ -59,7 +60,7 @@ cal_info = {
     "OffBP": ("offbp", "Barometric Pressure Offset"),
     "GainBP": ("gainbp", "Barometric Pressure Gain Factor"),
     "AvgNegG": ("avg-1g", "Minus One Gee Avg"),
-    "StdNegG": ("std-1g", "Minus One Gee Std Dev"),
+    "StDNegG": ("std-1g", "Minus One Gee Std Dev"),
     "FiDNegG": ("fid(0)", "Finite Difference on [-1, 0]"),
     "AvgZeroG": ("avg0g", "Zero Gee Avg"),
     "StDZeroG": ("std0g", "Zero Gee Std Dev"),
@@ -96,15 +97,24 @@ data_info = {
     "OK": "AltAcc sez 'OK'",
 }
 
+# flight data header format
+altacc_format = struct.Struct("<B3x4B4BBBBB4sB4sBB5x8160sH2s")
+AltAccDump = namedtuple('AltAccDump', ' '.join(data_info.keys()))
+
+# PALT_GAIN_4100 = 0.1113501786   # this is the 4100 xducer
+# PALT_OFFSET_4100 = 3.418657     # these are average lines
+# PALT_GAIN_5100 = 0.1354567027   # this is the 5100 xducer
+# PALT_OFFSET_5100 = 1.475092     # this is 40 mV / KPa
+# PALT_GAIN_4100   0.1760937134  /* this is the 4100 xducer
+# PALT_OFFSET_4100 -12.341491    /* this is 52 mV / KPA !!!
+# PALT_GAIN_5100   0.1447552322  /* this is the 5100 xducer
+# PALT_OFFSET_5100 -0.478599     /* this is from test1
+
 XducerParam = namedtuple('XducerParam', 'desc gain offset')
 xducer_info = {
     "MPX4100": XducerParam._make(("Motorola MPX5100", 0.1113501786, 3.418657)),
     "MPX5100": XducerParam._make(("Motorola MPX4100", 0.1354567027, 1.475092))
 }
-
-altacc_format = struct.Struct("<B3x4B4BBBBB4sB4sBB5x8160sH2s")
-AltAccDump = namedtuple('AltAccDump', ' '.join(data_info.keys()))
-
 
 # noinspection PyProtectedMember
 def read_datafile(path: str):
@@ -179,11 +189,11 @@ def read_calfile(path: str):
 def dump_calfile(file, data, header=None):
     fp = open(file, "w") if file else sys.stdout
 
-    if header:
-        print(header, file=fp)
+    print("#\n# AltAcc Calibration Data %s\n#\n" % 
+          (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")), file=fp)
 
     for k, v in data.items():
-        if k != 'Data':
+        if v is not None and k != 'Data':
             print(f'{cal_info[k][0]:8}  {v:8}  # {cal_info[k][1]}', file=fp)
 
     if file:
