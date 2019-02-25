@@ -27,15 +27,16 @@ def parse_commandline():
 
     parser.add_argument('-q', '--quiet', action='store_true', help="be quiet about it")
     parser.add_argument('--version', action='version', version=f'v{VERSION}')
-    parser.add_argument('calfile', default=None, nargs='?', action='store', help='output calibration filename (same as --out)')
+    parser.add_argument('calfile', default=None, nargs='?', action='store',
+                        help='output calibration filename (same as --out)')
 
     args = parser.parse_args()
 
 
 def set_port(port):
-    if True:
+    if port == 'MOCK':
         class SerMock:
-            name = 'COM9'
+            name = port
             
             def write(self, data):
                 pass
@@ -44,17 +45,21 @@ def set_port(port):
                 return b'125 236\n'
 
         return SerMock() 
+    else:
+        import serial
+        com = serial.Serial(port=port, baudrate=BAUD)
+        if not com:
+            print(f"could not open {port}")
+            sys.exit(1)
 
-    import serial
-    com = serial.Serial(port=port, baudrate=BAUD)
-    if not com:
-        print(f"could not open {port}")
-        sys.exit(1)
-
-    return com
+        return com
 
 
 def get_samples(com):
+    # discard any noise on the line
+    com.reset_input_buffer()
+    com.reset_output_buffer()
+
     com.write(b'/T')
 
     samples = []
@@ -62,6 +67,15 @@ def get_samples(com):
         line = com.read(8)
         if len(line) < 8:
             break
+
+        # Due to the LED sharing the serial line check for and discard noise
+        if b'\x00' in line:
+            # attempt to sync with the end of line
+            while True:
+                c = com.read(1)
+                if c == b'\n':
+                    break
+            continue
 
         a, p = [int(x) for x in line.strip().split()]
         
@@ -79,7 +93,7 @@ def get_data(com, what):
     while True:
         data = get_samples(com)
 
-        print(f"read {len(data)} lines from the AltAcc on {com.name}")
+        print(f"received {len(data)} of 256 samples from the AltAcc on {com.name}")
 
         s = input("accept AltAcc data? ( y-yes | n-no | x-exit ) ")
 
@@ -114,14 +128,13 @@ def main():
 
     # Create a skeleton cal dict
     cal = {k: None for k in cal_info.keys()}
-    print(cal)
 
     # go read the .nit file -- (v2) -- Moved here so CalFile, et al are set
     nit = read_nitfile(args.nit)
     print(nit)
 
+    # Open the com port
     port = args.port or nit['port'] or PORT
-
     com = set_port(port)
 
     print(f"gathering calibration data from the AltAcc on {port}")
@@ -220,5 +233,9 @@ def main():
     if not args.quiet:
         dump_calfile(None, cal)
 
-sys.argv = ['probate.py', 'pb.cal']
+
+if "win" not in sys.platform:
+    # For Pythonsita bug in debug
+    sys.argv = ['probate.py', 'pb.cal']
+
 main()

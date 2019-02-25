@@ -216,6 +216,8 @@ def main():
         print("%sAltAcc Data file:         %s" % (com, data_filename), file=fp)
         print("%sCalibration file:         %s" % (com, cal_filename), file=fp)
         print("%s" % com, file=fp)
+        print("%sPressure Offset:       %11.4f " % (com, cal['OffBP']), file=fp)
+        print("%sPressure Gain/Slope:   %11.4f " % (com, cal['GainBP']), file=fp)
         print("%sAltAcc Gain Factor:    %11.4f GHarrys/G" % (com, slope), file=fp)
         print("%sAltAcc Minus One Gee:  %11.4f GHarrys" % (com, neggee), file=fp)
         print("%sAltAcc Zero Gee:       %11.4f GHarrys" % (com, zerogee), file=fp)
@@ -393,15 +395,15 @@ def main():
     def report2(fp):
         if args.fmt == 'A':
             print(
-            "      Time  Accel  Press    Sum  Accelerat   Velocity   Altitude  PressAlt\n"
-            "       sec  units  units  units   ft/sec^2     ft/sec       feet      feet\n"
-            " =========  =====  =====  =====  =========  =========  =========  ========\n",
-            file=fp)
+                "      Time  Accel  Press    Sum  Accelerat   Velocity   Altitude  PressAlt\n"
+                "       sec  units  units  units   ft/sec^2     ft/sec       feet      feet\n"
+                " =========  =====  =====  =====  =========  =========  =========  ========\n",
+                file=fp)
         else:
             print(
-            '''"Time","Accel","Press","Vel","Accel","Velocity","IAlt","PAlt",'''
-            '''"sec","GHarrys","Orvilles","Verns","ft/sec^2","ft/sec","feet","feet"''',
-            file=fp)
+                '''"Time","Accel","Press","Vel","Accel","Velocity","IAlt","PAlt",'''
+                '''"sec","GHarrys","Orvilles","Verns","ft/sec^2","ft/sec","feet","feet"''',
+                file=fp)
 
         # TODO: check if the correct len is dumped and take out the hardcode
         maxt = 10

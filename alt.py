@@ -20,7 +20,7 @@ def palt(press, press_0):
 
     if cali_data["OffBP"] != 1.00:
         p0 = press_0 * cali_data['GainBP'] + cali_data['OffBP']
-        p1 = press   * cali_data['GainBP'] + cali_data['OffBP']
+        p1 = press * cali_data['GainBP'] + cali_data['OffBP']
         dp = p1 / p0
     else:
         dp = (press + cali_data['OffBP']) / (press_0 + cali_data['OffBP'])
@@ -44,7 +44,7 @@ def palt2(press, press_0):
         return None
 
     p0 = press_0 * cali_data['GainBP'] + cali_data['OffBP']
-    p1 = press   * cali_data['GainBP'] + cali_data['OffBP']
+    p1 = press * cali_data['GainBP'] + cali_data['OffBP']
 
     alt = (1 - (p1 / p0) ** (1 / 5.256)) / 0.00000688
 

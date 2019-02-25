@@ -186,15 +186,16 @@ def read_calfile(path: str):
     return cal
 
 
-def dump_calfile(file, data, header=None):
+def dump_calfile(file, data):
     fp = open(file, "w") if file else sys.stdout
 
+    # header
     print("#\n# AltAcc Calibration Data %s\n#\n" % 
           (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")), file=fp)
 
     for k, v in data.items():
         if v is not None and k != 'Data':
-            print(f'{cal_info[k][0]:8}  {v:8}  # {cal_info[k][1]}', file=fp)
+            print('{:8s}  {:8.4f}  # {:s}'.format(cal_info[k][0], v, cal_info[k][1]), file=fp)
 
     if file:
         fp.close()
