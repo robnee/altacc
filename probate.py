@@ -49,7 +49,7 @@ def set_port(port):
         import serial
         com = serial.Serial(port=port, baudrate=BAUD)
         if not com:
-            print(f"could not open {port}")
+            print("could not open", port)
             sys.exit(1)
 
         return com
@@ -82,7 +82,7 @@ def get_samples(com):
         samples.append(Samples._make((a, p)))
         
         if i % 8 == 0:
-            print('.', end='')
+            print(TICK_CHAR, end='')
             sys.stdout.flush()
     print()
 
