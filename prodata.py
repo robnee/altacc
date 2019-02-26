@@ -116,7 +116,7 @@ xducer_info = {
     "MPX5100": XducerParam._make(("Motorola MPX4100", 0.1354567027, 1.475092))
 }
 
-# noinspection PyProtectedMember
+
 def read_datafile(path: str):
     """ read a flight data file and unpack it """
 
@@ -190,7 +190,7 @@ def dump_calfile(file, data):
     fp = open(file, "w") if file else sys.stdout
 
     # header
-    print("#\n# AltAcc Calibration Data %s\n#\n" % 
+    print("#\n# AltAcc Calibration Data %s\n#" %
           (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")), file=fp)
 
     for k, v in data.items():
@@ -215,4 +215,61 @@ def dump_datafile(data):
             print(f"{k:10}: {b:12}  {data_info[k]}")
         else:
             print(f'{k:10}: {v:12}  {data_info[k]}')
+
+
+def calc_offset(actpre, actcount):
+    """
+    compute offset in ADC counts from a pressure reading and known
+    barometric pressure.  actpre is in kPa and actcount is corresponding
+    adc count.  Recall:
+
+    y = mx + b
+
+    where:
+    y is the pressure in the units of choice
+    x is the ADC reading
+    m is the slope
+    b is the y offset
+
+    54mv/kpa from data sheet but that is scaled for a 5.1V supply so adjust
+    94kPa measured pressure
+    209 ADC count
+
+      sensitivity = 54mv/kPa * 5V/5.1V = 52.94 mV/kPa
+
+    converting to ADC counts...
+
+      52.94 mV/kPa * 255 counts/5,000mV = 2.7counts/kPa
+
+    We really want the inverse of that or 0.37037 kPa/count so we have:
+
+      y = 5000mV / 255counts / sensitivity * x + b
+
+      5000mv / 255 counts = 0.37037 kpA/count
+
+      94 kPa = 0.37037 kpA/count * 209 counts + b
+
+      b = y - mx
+    """
+
+    sensitivity = 54 * 5 / 5.1  # mv/kPa
+    m = 5000 / 255 / sensitivity  # kPa/count
+    b = actpre - m * actcount  # kPa
+
+    offset = b / m  # count
+
+    return offset
+
+
+def palt3(press, press0):
+    """ This does alt calc using NASA Earth Atmosphere model to 11000' """
+
+    if press <= 0:
+        return None
+
+    def tropo_alt(pcount):
+        p = pcount * 0.37037 + 13.6  # kPa
+        return (288.14 - 288.08 * (p / 101.29) ** (1 / 5.256)) / 0.00649
+
+    return (tropo_alt(press) - tropo_alt(press0)) * 3.2808  # converted to feet
 

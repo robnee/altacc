@@ -157,6 +157,12 @@ def main():
     cal['AvgBP'] = pre.sum_ / pre.n
     cal['StDBP'] = math.sqrt((pre.squares - (pre.sum_ * pre.sum_ / pre.n)) / (pre.n - 1))
 
+    # Work out offset
+    cal['OffBP'] = calc_offset(cal['ActBP'], cal['AvgBP'])
+
+    dump_calfile(None, cal)
+
+    # Accelerometer calibration
     print("\nSet the AltAcc Upside Down to Measure -1 G")
     input("then press enter when ready ( x to quit ) ")
     if s.strip() in ('x', 'X'):
@@ -228,7 +234,7 @@ def main():
         if s in ('y', 'Y'):
             sys.exit(3)
  
-    # dump_calfile(cal_filename, cal)
+    dump_calfile(cal_filename, cal)
 
     if not args.quiet:
         dump_calfile(None, cal)
