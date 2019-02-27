@@ -1,6 +1,6 @@
 """                                produce
 
-This program is to calibrate the BSR AltAcc and save results to a file
+This program is to clear the AltAcc flight data memory
 """
 
 import time
@@ -13,9 +13,6 @@ PORT = "/dev/ttyUSB0"
 BAUD = 9600
 TICK_CHAR = '.'
 CLEAR_TIME = 55
-
-Data = namedtuple('Data', "n, sum_ squares")
-Samples = namedtuple('Samples', "acc pre")
 
 
 def parse_commandline():
@@ -39,7 +36,7 @@ def set_port(port):
             def write(self, data):
                 pass
 
-            def read(self, count):
+            def read(self, _):
                 return b'125 236\n'
 
         return SerMock()
@@ -56,12 +53,9 @@ def set_port(port):
 def main():
 
     parse_commandline()
-    print()
-    print(args)
 
     # go read the .nit file -- (v2) -- Moved here so CalFile, et al are set
     nit = read_nitfile(args.nit)
-    print(nit)
 
     if not args.yes:
         s = input("\nDo you really mean to clear all data from the AltAcc? (y|n) ")
@@ -73,8 +67,8 @@ def main():
     com = set_port(port)
 
     if not args.quiet:
-       print("clearing the AltAcc on ", port)
-       print("|                                                     |")
+        print("clearing the AltAcc on ", port)
+        print("|                                                     |")
 
     # discard any noise on the line
     com.reset_input_buffer()
