@@ -262,7 +262,7 @@ def calc_offset(actpre, actcount):
 
 
 def palt3(press, press0):
-    """ This does alt calc using NASA Earth Atmosphere model to 11000' """
+    """ This does alt calc using NASA Earth Atmosphere model to 11,000' """
 
     if press <= 0:
         return None
