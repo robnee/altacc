@@ -261,14 +261,17 @@ def calc_offset(actpre, actcount):
     return offset
 
 
-def palt3(press, press0):
+def palt3(press, press0, cal=None):
     """ This does alt calc using NASA Earth Atmosphere model to 11,000' """
 
     if press <= 0:
         return None
 
     def tropo_alt(pcount):
-        p = pcount * 0.37037 + 13.6  # kPa
+        if cal:
+            p = pcount * cal['GainBP'] + cal['OffBP']  # kPa
+        else:
+            p = pcount * 0.37037 + 13.6  # kPa
         return (288.14 - 288.08 * (p / 101.29) ** (1 / 5.256)) / 0.00649
 
     return (tropo_alt(press) - tropo_alt(press0)) * 3.2808  # converted to feet

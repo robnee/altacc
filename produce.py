@@ -286,7 +286,7 @@ def main():
             oalt = dalt
             
             ialt.append(ialt[-1] + dalt)
-            palt.append(pressure_alt(pre[i], flight.BasePre, cal) or 0.0)
+            palt.append(prodata.palt3(pre[i], flight.BasePre) or 0.0)
             acc.append(taylor(i, vee, 12 * dT))         # accel == dv/dt
             gsum.append(gsum[-1] + gee[i] - goffset)    # goffset = onegee
 
@@ -342,7 +342,8 @@ def main():
     main_alt = pressure_alt(flight.MainPre, flight.BasePre, cal)
     drogue_alt = pressure_alt(flight.DroguePre, flight.BasePre, cal)
     maxpalt = pressure_alt(minpre, flight.BasePre, cal)
-
+    biba_alt = prodata.palt3(apogee_pre, flight.BasePre)
+    
     def report1(fp, com=''):
         print("%s" % com, file=fp)
         print("%sAltAcc Firmware:          %s" % (com, ver), file=fp)
@@ -435,6 +436,8 @@ def main():
                   (com, msl_alt, U['alt'], apogee_time, desc), file=fp)
         print("%sAGL Pressure Altitude:    %6.0f    %s         ( %9.5f sec )" %
               (com, agl_alt, U['alt'], apogee_time), file=fp)
+        print("%sbiba Pressure Altitude:    %6.0f    %s         ( %9.5f sec )" %
+              (com, biba_alt, U['alt'], apogee_time), file=fp)
         print("%sMax Pressure Altitude:    %6.0f    %s         ( %9.5f sec )" %
               (com, maxpalt, U['alt'], tminpre), file=fp)
         print("%sMax Inertial Altitude:    %6.0f    %s         ( %9.5f sec )" %
@@ -454,27 +457,30 @@ def main():
 
         t = tee[:points]
         g = [(x - onegee) / slope for x in gee[:points]]
+        # smooth the pressure data
         p = [sum(palt[i: i + 4]) / 4 for i in range(len(palt))]
         
-        print(len(tee), len(vee), len(gee), len(ialt), len(t), len(g))
-        
+        plt.suptitle(data_filename)
+
         plt.subplot(221)
         plt.plot(t, g)
         plt.legend(['acc G'], loc='upper right')
         plt.xlabel('sec')
+        plt.ylabel('G')
         
         plt.subplot(223)
         plt.plot(t, vee[:points], color='g')
         plt.plot(t, ialt[:points], color='r')
         plt.plot(t, palt[:points], color='r')
         plt.legend(['vel ft/sec', 'alt ft'], loc='upper left')
-        
-        plt.subplot(222)
-        plt.plot(tee[:len(p)], p, color='r')
-        #plt.ylim(ymin=0)
-        plt.legend(['alt'], loc='upper right')
         plt.xlabel('sec')
         
+        plt.subplot(222)
+        plt.title('Pressure Altitude')
+        plt.plot(tee[:len(p)], p, color='r')
+        plt.ylim(ymin=-5)
+        # plt.legend(['alt'], loc='upper right')
+        plt.xlabel('sec')
         plt.xlim(xmin=-0.25)
         
         plt.show()
